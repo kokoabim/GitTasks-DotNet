@@ -1,0 +1,14 @@
+{
+    "dotnet.defaultSolution": "${workspaceFolder}/Kokoabim.GitTasks.sln",
+    "files.exclude": {
+        "**/bin/": true,
+        "**/obj/": true
+    },
+    "cSpell.words": [
+        "gitmodules",
+        "gt"
+    ],
+    "cSpell.ignoreWords": [
+        "namespaceanddescendants"
+    ]
+}

@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET Launch",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Kokoabim.GitTasks/bin/Debug/net9.0/gt",
+            "args": [
+                "--help"
+            ],
+            "cwd": "${workspaceFolder}/src/Kokoabim.GitTasks",
+            "stopAtEntry": false,
+            "logging": {
+                "moduleLoad": false
+            },
+            "console": "integratedTerminal"
+        }
+    ]
+}
