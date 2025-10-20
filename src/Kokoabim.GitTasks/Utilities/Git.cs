@@ -26,10 +26,31 @@ public class Git
         return await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken);
     }
 
+    public ExecutorResult<GitBranch[]> GetBranches(string path, CancellationToken cancellationToken = default)
+    {
+        var result = _executor.Execute("git", "branch --all", workingDirectory: path, cancellationToken: cancellationToken);
+        result.Reference = path;
+        if (!result.Success) return result.WithNull<GitBranch[]>();
+
+        var branches = result.Output.Trim().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(GitBranch.Parse).ToArray();
+        return result.WithObject(branches);
+    }
+
+    public async Task<ExecutorResult<GitBranch[]>> GetBranchesAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var result = await _executor.ExecuteAsync("git", "branch --all", workingDirectory: path, cancellationToken: cancellationToken);
+        result.Reference = path;
+        if (!result.Success) return result.WithNull<GitBranch[]>();
+
+        var branches = result.Output.Trim().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(GitBranch.Parse).ToArray();
+        return result.WithObject(branches);
+    }
+
     public ExecutorResult<GitCommitPosition> GetCommitPosition(string path, string? branch = null, CancellationToken cancellationToken = default)
     {
         var execResult = _executor.Execute("git", $"rev-list --left-right --count \"origin/{branch}...{branch}\"", workingDirectory: path, cancellationToken: cancellationToken);
-        if (!execResult.Success) return execResult.WithObject<GitCommitPosition>(null);
+        execResult.Reference = path;
+        if (!execResult.Success) return execResult.WithNull<GitCommitPosition>();
 
         var parts = execResult.Output.Trim().Split(['\t', ' '], 2, StringSplitOptions.RemoveEmptyEntries);
 
@@ -42,27 +63,31 @@ public class Git
             });
         }
 
-        return execResult.WithObject<GitCommitPosition>(null);
+        return execResult.WithNull<GitCommitPosition>();
     }
 
-    public ExecutorResult GetCurrentBranch(string path, CancellationToken cancellationToken = default) =>
-        _executor.Execute("git", "rev-parse --abbrev-ref HEAD", workingDirectory: path, cancellationToken: cancellationToken);
+    public ExecutorResult<string> GetCurrentBranch(string path, CancellationToken cancellationToken = default)
+    {
+        var result = _executor.Execute("git", "rev-parse --abbrev-ref HEAD", workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithObject(result.Output?.Trim(), path);
+    }
 
-    public async Task<ExecutorResult> GetCurrentBranchAsync(string path, CancellationToken cancellationToken = default) =>
-        await _executor.ExecuteAsync("git", "rev-parse --abbrev-ref HEAD", workingDirectory: path, cancellationToken: cancellationToken);
+    public async Task<ExecutorResult<string>> GetCurrentBranchAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var result = await _executor.ExecuteAsync("git", "rev-parse --abbrev-ref HEAD", workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithObject(result.Output?.Trim(), path);
+    }
 
     public ExecutorResult<string> GetDefaultBranch(string path, CancellationToken cancellationToken = default)
     {
         var result = _executor.Execute("git", "symbolic-ref refs/remotes/origin/HEAD --short", workingDirectory: path, cancellationToken: cancellationToken);
-        var resultWithObject = result.WithObject(result.Output?.Trim().Split('/', 2)[1]);
-        return resultWithObject;
+        return result.Success ? result.WithObject(result.Output?.Trim().Split('/', 2)[1], path) : result.WithNull<string>(path);
     }
 
     public async Task<ExecutorResult<string>> GetDefaultBranchAsync(string path, CancellationToken cancellationToken = default)
     {
         var result = await _executor.ExecuteAsync("git", "symbolic-ref refs/remotes/origin/HEAD --short", workingDirectory: path, cancellationToken: cancellationToken);
-        var resultWithObject = result.WithObject(result.Output?.Trim().Split('/', 2)[1]);
-        return resultWithObject;
+        return result.Success ? result.WithObject(result.Output?.Trim().Split('/', 2)[1], path) : result.WithNull<string>(path);
     }
 
     public string[] GetDirectories(string path, CancellationToken cancellationToken = default)
@@ -83,35 +108,37 @@ public class Git
         return [.. directories.Distinct().Order()];
     }
 
-    public GitRepository[] GetRepositories(string path, CancellationToken cancellationToken = default)
+    public ExecutorResult<GitRepository>[] GetRepositories(string path, CancellationToken cancellationToken = default)
     {
-        var results = new List<GitRepository?>();
+        var results = new List<ExecutorResult<GitRepository>>();
         results.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepository(d, isSubmodule: false, cancellationToken)));
         results.AddRange(GetSubmoduleDirectories(path, cancellationToken).Select(d => GetRepository(d, isSubmodule: true, cancellationToken)));
 
-        return [.. results.Where(r => r is not null).Cast<GitRepository>().Distinct().OrderBy(r => r.Path).ForEach(r => r.SetRelativePath(path))];
+        return [.. results.OrderBy(r => r.Object!.Path).ForEach(r => r.Object!.SetRelativePath(path))];
     }
 
-    public async Task<GitRepository[]> GetRepositoriesAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ExecutorResult<GitRepository>[]> GetRepositoriesAsync(string path, CancellationToken cancellationToken = default)
     {
-        var tasks = new List<Task<GitRepository?>>();
+        var tasks = new List<Task<ExecutorResult<GitRepository>>>();
         tasks.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepositoryAsync(d, isSubmodule: false, cancellationToken)));
         tasks.AddRange((await GetSubmoduleDirectoriesAsync(path, cancellationToken)).Select(d => GetRepositoryAsync(d, isSubmodule: true, cancellationToken)));
         var results = await Task.WhenAll(tasks);
 
-        return [.. results.Where(r => r is not null).Cast<GitRepository>().Distinct().OrderBy(r => r.Path).ForEach(r => r.SetRelativePath(path))];
+        return [.. results.OrderBy(r => r.Object!.Path).ForEach(r => r.Object!.SetRelativePath(path))];
     }
 
     public ExecutorResult GetStatus(string path, bool porcelain = false, CancellationToken cancellationToken = default)
     {
         var args = porcelain ? "status --porcelain" : "status";
-        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken);
+        var result = _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithReference(path);
     }
 
     public async Task<ExecutorResult> GetStatusAsync(string path, bool porcelain = false, CancellationToken cancellationToken = default)
     {
         var args = porcelain ? "status --porcelain" : "status";
-        return await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken);
+        var result = await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithReference(path);
     }
 
     public string[] GetSubmoduleDirectories(string path, CancellationToken cancellationToken = default)
@@ -142,48 +169,69 @@ public class Git
         return result.Success ? result.Output.Trim() : null;
     }
 
-    public async Task<ExecutorResult> PullAsync(string path, CancellationToken cancellationToken = default) =>
-        await _executor.ExecuteAsync("git", "pull", workingDirectory: path, cancellationToken: cancellationToken);
-
-    private GitRepository? GetRepository(string path, bool isSubmodule, CancellationToken cancellationToken = default)
+    public async Task<ExecutorResult> PullAsync(string path, CancellationToken cancellationToken = default)
     {
-        var defaultBranch = GetDefaultBranch(path, cancellationToken);
-        if (!defaultBranch.Success) return null;
-
-        var currentBranch = GetCurrentBranch(path, cancellationToken);
-        if (!currentBranch.Success) return null;
-
-        return new GitRepository
-        {
-            CurrentBranch = currentBranch.Output.Trim(),
-            DefaultBranch = defaultBranch.Object,
-            IsSubmodule = isSubmodule,
-            Path = path
-        };
+        var result = await _executor.ExecuteAsync("git", "pull", workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithReference(path);
     }
 
-    private async Task<GitRepository?> GetRepositoryAsync(string path, bool isSubmodule, CancellationToken cancellationToken = default)
+    public ExecutorResult SetHead(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
     {
-        var defaultBranch = await GetDefaultBranchAsync(path, cancellationToken);
-        if (!defaultBranch.Success) return null;
-
-        var currentBranch = await GetCurrentBranchAsync(path, cancellationToken);
-        if (!currentBranch.Success) return null;
-
-        return new GitRepository
+        if (branch is null && !automatically) return new ExecutorResult
         {
-            CurrentBranch = currentBranch.Output.Trim(),
-            DefaultBranch = defaultBranch.Object,
+            ExitCode = 1,
+            Output = "Branch must be specified if not setting automatically",
+            Reference = path,
+        };
+
+        var arg = branch is not null ? branch : "--auto"; // 'automatically' is true if branch is null
+        var result = _executor.Execute("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithReference(path);
+    }
+
+    public async Task<ExecutorResult> SetHeadAsync(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
+    {
+        if (branch is null && !automatically) return new ExecutorResult
+        {
+            ExitCode = 1,
+            Output = "Branch must be specified if not setting automatically",
+            Reference = path,
+        };
+
+        var arg = branch is not null ? branch : "--auto"; // 'automatically' is true if branch is null
+        var result = await _executor.ExecuteAsync("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithReference(path);
+    }
+
+    private ExecutorResult<GitRepository> GetRepository(string path, bool isSubmodule, CancellationToken cancellationToken = default)
+    {
+        var defaultBranchExecResult = GetDefaultBranch(path, cancellationToken);
+        var currentBranchExecResult = GetCurrentBranch(path, cancellationToken);
+
+        return ExecutorResult.CreateWithObject(new GitRepository()
+        {
+            Error = new string?[] { currentBranchExecResult.Success ? null : currentBranchExecResult.Output, defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output }.CombineNonNulls("; "),
+            CurrentBranch = currentBranchExecResult.Object,
+            DefaultBranch = defaultBranchExecResult.Object,
             IsSubmodule = isSubmodule,
             Path = path
-        };
+        }, path);
+    }
+
+    private async Task<ExecutorResult<GitRepository>> GetRepositoryAsync(string path, bool isSubmodule, CancellationToken cancellationToken = default)
+    {
+        var defaultBranchExecResult = await GetDefaultBranchAsync(path, cancellationToken);
+        var currentBranchExecResult = await GetCurrentBranchAsync(path, cancellationToken);
+
+        return ExecutorResult.CreateWithObject(new GitRepository()
+        {
+            Error = new string?[] { currentBranchExecResult.Success ? null : currentBranchExecResult.Output, defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output }.CombineNonNulls("; "),
+            CurrentBranch = currentBranchExecResult.Object,
+            DefaultBranch = defaultBranchExecResult.Object,
+            IsSubmodule = isSubmodule,
+            Path = path
+        }, path);
     }
 
     #endregion 
-}
-
-public class GitCommitPosition
-{
-    public int AheadBy { get; set; }
-    public int BehindBy { get; set; }
 }

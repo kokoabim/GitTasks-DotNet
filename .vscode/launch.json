@@ -7,9 +7,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/src/Kokoabim.GitTasks/bin/Debug/net9.0/gt",
-            "args": [
-                "--help"
-            ],
+            "args": [],
             "cwd": "${workspaceFolder}/src/Kokoabim.GitTasks",
             "stopAtEntry": false,
             "logging": {

@@ -15,8 +15,18 @@ public class Commands
 
     public ConsoleCommand[] Generate()
     {
-        return [MainCommand(), PullCommand(), StatusCommand()];
+        return [FixRefCommand(), MainCommand(), PullCommand(), StatusCommand()];
     }
+
+    private ConsoleCommand FixRefCommand() => new(
+        name: "fix-ref",
+        titleText: "Fix git reference (e.g. \"ref is not a symbolic ref\")",
+        arguments: [
+            Arguments.PathArgument,
+            Arguments.ShowGitOutputSwitch
+        ],
+        asyncFunction: _tasks.FixReferenceAsync
+    );
 
     private ConsoleCommand MainCommand() => new(
         name: "main",

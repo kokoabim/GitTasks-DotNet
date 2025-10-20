@@ -12,8 +12,8 @@ public class Tasks
     public async Task<int> CheckoutMainAsync(ConsoleContext context)
     {
         var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
-        var repositories = _git.GetRepositories(path, context.CancellationToken);
-        if (repositories.Length == 0)
+        var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
+        if (repositoryExecResults.Length == 0)
         {
             Console.WriteLine($"No git repositories found: {path}");
             return 0;
@@ -22,22 +22,28 @@ public class Tasks
         var pullSwitch = context.HasSwitch(Arguments.PullSwitch.Name);
 
         var pullTasks = pullSwitch
-            ? repositories.ToDictionary(
-                r => r,
-                r => _git.PullAsync(r.Path, context.CancellationToken))
+            ? repositoryExecResults.Where(r => r.Success).ToDictionary(
+                r => r.Object!,
+                r => _git.PullAsync(r.Object!.Path, context.CancellationToken))
             : [];
 
-        var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositories);
+        var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoryExecResults);
 
-        foreach (var repo in repositories)
+        foreach (var repoExecResult in repositoryExecResults)
         {
+            if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+            var repo = repoExecResult.Object;
+
             repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
             ConsoleOutput.WriteHeaderDynamicallyStatus(repo);
 
-            repo.Results.Checkout = _git.Checkout(repo.Path, repo.DefaultBranch, context.CancellationToken);
-            ConsoleOutput.WriteHeaderDynamicallyCheckout(repo);
+            if (repo.DefaultBranch is not null)
+            {
+                repo.Results.Checkout = _git.Checkout(repo.Path, repo.DefaultBranch, context.CancellationToken);
+                ConsoleOutput.WriteHeaderDynamicallyCheckout(repo);
+            }
 
-            if (!pullSwitch)
+            if (!pullSwitch && repo.CurrentBranch is not null)
             {
                 repo.Results.CommitPosition = _git.GetCommitPosition(repo.Path, repo.CurrentBranch, context.CancellationToken);
                 ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
@@ -46,8 +52,11 @@ public class Tasks
 
         if (pullSwitch)
         {
-            foreach (var repo in repositories)
+            foreach (var repoExecResult in repositoryExecResults)
             {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
                 var pullTask = pullTasks[repo];
                 if (!pullTask.IsCompleted) await pullTask;
                 repo.Results.Pull = pullTask.Result;
@@ -64,11 +73,11 @@ public class Tasks
         return 0;
     }
 
-    public async Task<int> PullBranchAsync(ConsoleContext context)
+    public async Task<int> FixReferenceAsync(ConsoleContext context)
     {
         var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
-        var repositories = _git.GetRepositories(path, context.CancellationToken);
-        if (repositories.Length == 0)
+        var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
+        if (repositoryExecResults.Length == 0)
         {
             Console.WriteLine($"No git repositories found: {path}");
             return 0;
@@ -78,14 +87,102 @@ public class Tasks
 
         if (showGitOutput)
         {
-            var pullTasks = repositories.ToDictionary(
-                r => r,
-                r => _git.PullAsync(r.Path, context.CancellationToken));
-
-            foreach (var repo in repositories)
+            foreach (var repoExecResult in repositoryExecResults)
             {
-                repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
-                ConsoleOutput.WriteHeaderRepository(repo, withStatus: true, newline: false);
+                ConsoleOutput.WriteHeaderRepository(repoExecResult, withStatus: false, newline: false);
+
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+
+                var repo = repoExecResult.Object;
+
+                repo.Results.Branches = _git.GetBranches(repo.Path, context.CancellationToken);
+                var remoteName = (repo.Results.Branches.Success
+                    ? repo.Results.Branches.Object!.FirstOrDefault(b => b.IsRemote)?.Remote
+                    : null)
+                    ?? "origin";
+
+                repo.Results.SetHead = _git.SetHead(repo.Path, remoteName, automatically: true, cancellationToken: context.CancellationToken);
+                ConsoleOutput.WriteHeaderSetHead(repo, dynamically: false);
+
+                Console.WriteLine();
+
+                if (!string.IsNullOrWhiteSpace(repo.Results.SetHead.Output)) ConsoleOutput.WriteLight(repo.Results.SetHead.Output, true);
+            }
+        }
+        else
+        {
+            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoryExecResults);
+
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
+                ConsoleOutput.WriteHeaderDynamicallyActivity(repo);
+            }
+
+            var tasks = repositoryExecResults.Where(r => r.Success).ToDictionary(
+                r => r.Object!,
+                r => Task.Run(async () =>
+                {
+                    var repo = r.Object!;
+                    repo.Results.Branches = await _git.GetBranchesAsync(repo.Path, context.CancellationToken);
+                    var remoteName = (repo.Results.Branches.Success
+                        ? repo.Results.Branches.Object!.FirstOrDefault(b => b.IsRemote)?.Remote
+                        : null)
+                        ?? "origin";
+
+                    repo.Results.SetHead = await _git.SetHeadAsync(repo.Path, remoteName, automatically: true, cancellationToken: context.CancellationToken);
+                },
+                context.CancellationToken));
+
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
+                var task = tasks[repo];
+                if (!task.IsCompleted) await task;
+
+                ConsoleOutput.WriteHeaderSetHead(repo, dynamically: true);
+            }
+
+            Console.SetCursorPosition(0, cursorTop);
+        }
+
+        return 0;
+    }
+
+    public async Task<int> PullBranchAsync(ConsoleContext context)
+    {
+        var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
+        var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
+        if (repositoryExecResults.Length == 0)
+        {
+            Console.WriteLine($"No git repositories found: {path}");
+            return 0;
+        }
+
+        var showGitOutput = context.HasSwitch(Arguments.ShowGitOutputSwitch.Name);
+
+        if (showGitOutput)
+        {
+            var pullTasks = repositoryExecResults.Where(r => r.Success).ToDictionary(
+                r => r.Object!,
+                r => _git.PullAsync(r.Object!.Path, context.CancellationToken));
+
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                var repo = repoExecResult.Object;
+
+                if (repo is not null) repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
+                ConsoleOutput.WriteHeaderRepository(repoExecResult, withStatus: true, newline: false);
+
+                if (!repoExecResult.Success || repo is null)
+                {
+                    Console.WriteLine();
+                    continue;
+                }
 
                 var pullTask = pullTasks[repo];
                 if (!pullTask.IsCompleted) await pullTask;
@@ -103,23 +200,27 @@ public class Tasks
         }
         else
         {
-            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositories);
+            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoryExecResults);
 
-            foreach (var repo in repositories)
+            foreach (var repoExecResult in repositoryExecResults)
             {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
                 repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
                 ConsoleOutput.WriteHeaderDynamicallyStatus(repo);
                 ConsoleOutput.WriteHeaderDynamicallyActivity(repo);
             }
 
-            await Task.WhenAll(repositories.Select(r => _git.PullAsync(r.Path, context.CancellationToken)
+            await Task.WhenAll(repositoryExecResults.Where(r => r.Success).Select(r => _git.PullAsync(r.Object!.Path, context.CancellationToken)
                 .ContinueWith(t =>
                 {
-                    r.Results.Pull = t.Result;
-                    ConsoleOutput.WriteHeaderPull(r, dynamically: true);
+                    var repo = r.Object!;
+                    repo.Results.Pull = t.Result;
+                    ConsoleOutput.WriteHeaderPull(repo, dynamically: true);
 
-                    r.Results.CommitPosition = _git.GetCommitPosition(r.Path, r.CurrentBranch, context.CancellationToken);
-                    ConsoleOutput.WriteHeaderCommitPosition(r, dynamically: true);
+                    repo.Results.CommitPosition = _git.GetCommitPosition(repo.Path, repo.CurrentBranch, context.CancellationToken);
+                    ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
                 },
                 context.CancellationToken)
             ));
@@ -133,8 +234,8 @@ public class Tasks
     public async Task<int> ShowStatusAsync(ConsoleContext context)
     {
         var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
-        var repositories = _git.GetRepositories(path, context.CancellationToken);
-        if (repositories.Length == 0)
+        var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
+        if (repositoryExecResults.Length == 0)
         {
             Console.WriteLine($"No git repositories found: {path}");
             return 0;
@@ -147,15 +248,23 @@ public class Tasks
         if (showFullStatus || showPendingChanges)
         {
             var fetchTasks = fetchRemote
-                ? repositories.ToDictionary(
-                    r => r,
-                    r => _git.FetchAsync(r.Path, r.CurrentBranch, context.CancellationToken))
+                ? repositoryExecResults.Where(r => r.Success && r.Object.CurrentBranch is not null).ToDictionary(
+                    r => r.Object!,
+                    r => _git.FetchAsync(r.Object!.Path, r.Object.CurrentBranch, context.CancellationToken))
                 : [];
 
-            foreach (var repo in repositories)
+            foreach (var repoExecResult in repositoryExecResults)
             {
-                repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
-                ConsoleOutput.WriteHeaderRepository(repo, withStatus: true, newline: false);
+                var repo = repoExecResult.Object;
+
+                if (repo is not null) repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
+                ConsoleOutput.WriteHeaderRepository(repoExecResult, withStatus: true, newline: false);
+
+                if (!repoExecResult.Success || repo is null)
+                {
+                    Console.WriteLine();
+                    continue;
+                }
 
                 if (fetchRemote)
                 {
@@ -172,7 +281,7 @@ public class Tasks
 
                 var statusOutput = showFullStatus && !string.IsNullOrWhiteSpace(repo.Results.FullStatus.Output)
                     ? repo.Results.FullStatus.Output
-                    : showPendingChanges && !string.IsNullOrWhiteSpace(repo.Results.Status.Output)
+                    : showPendingChanges && !string.IsNullOrWhiteSpace(repo.Results.Status!.Output)
                         ? repo.Results.Status.Output
                         : null;
 
@@ -188,10 +297,13 @@ public class Tasks
         }
         else
         {
-            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositories);
+            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoryExecResults);
 
-            foreach (var repo in repositories)
+            foreach (var repoExecResult in repositoryExecResults)
             {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
                 repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
                 ConsoleOutput.WriteHeaderDynamicallyStatus(repo);
 
@@ -205,12 +317,16 @@ public class Tasks
 
             if (fetchRemote)
             {
-                await Task.WhenAll(repositories.Select(r => _git.FetchAsync(r.Path, r.CurrentBranch, context.CancellationToken).ContinueWith(t =>
+                await Task.WhenAll(repositoryExecResults.Where(r => r.Success).Select(r => _git.FetchAsync(r.Object!.Path, r.Object.CurrentBranch, context.CancellationToken).ContinueWith(t =>
                 {
-                    r.Results.Fetch = t.Result;
+                    var repo = r.Object!;
+                    repo.Results.Fetch = t.Result;
 
-                    r.Results.CommitPosition = _git.GetCommitPosition(r.Path, r.CurrentBranch, context.CancellationToken);
-                    ConsoleOutput.WriteHeaderCommitPosition(r, dynamically: true);
+                    if (repo.CurrentBranch is not null)
+                    {
+                        repo.Results.CommitPosition = _git.GetCommitPosition(repo.Path, repo.CurrentBranch, context.CancellationToken);
+                        ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
+                    }
                 },
                 context.CancellationToken)));
             }

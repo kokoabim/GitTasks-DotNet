@@ -70,6 +70,7 @@ public static class ConsoleOutput
         else if (output.Contains("switched to branch", StringComparison.OrdinalIgnoreCase)) { message = "switched"; didSwitch = true; }
         else if (output.Contains("switched to a new branch", StringComparison.OrdinalIgnoreCase)) { message = "switched to new branch"; didSwitch = true; }
         else if (output.Contains("did not match", StringComparison.OrdinalIgnoreCase)) { message = "no match"; hasError = true; }
+        else if (output.Contains("not a symbolic ref", StringComparison.OrdinalIgnoreCase)) { message = "not a symbolic ref (use fix-ref to fix)"; hasError = true; }
         else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
         else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
         else { message = "unknown"; hasError = true; }
@@ -153,19 +154,43 @@ public static class ConsoleOutput
         repository.ConsolePosition.Left += message.Length + 1;
     }
 
-    public static void WriteHeaderRepository(GitRepository repository, bool withStatus = false, bool newline = true)
+    public static void WriteHeaderRepository(ExecutorResult<GitRepository> repositoryExecResult, bool withStatus = false, bool newline = true)
     {
-        WriteNormal(repository.RelativePath);
-
-        if (repository.CurrentBranch == repository.DefaultBranch) WriteLight($" {repository.CurrentBranch}");
-        else WriteBlue($" {repository.CurrentBranch}");
-
-        repository.ConsolePosition.Left = repository.RelativePath.Length + 1 + repository.CurrentBranch.Length;
-
-        if (withStatus && repository.Results.Status is not null)
+        if (!repositoryExecResult.Success)
         {
-            var output = repository.Results.Status.Output ?? "";
-            var hasError = !repository.Results.Status.Success;
+            WriteNormal(repositoryExecResult.Reference?.ToString() ?? "Unknown repository");
+            WriteRed(" error");
+            WriteLight($" ({repositoryExecResult})", newline: newline);
+
+            // Object is null here so we can't update repo.ConsolePosition.Left
+            return;
+        }
+
+        var repo = repositoryExecResult.Object!;
+
+        WriteNormal(repo.RelativePath);
+        repo.ConsolePosition.Left += repo.RelativePath.Length;
+
+        if (repo.CurrentBranch is not null)
+        {
+            if (repo.CurrentBranch == repo.DefaultBranch || repo.DefaultBranch is null) WriteLight($" {repo.CurrentBranch}");
+            else WriteBlue($" {repo.CurrentBranch}");
+
+            repo.ConsolePosition.Left += repo.CurrentBranch.Length + 1;
+        }
+
+        if (!repo.Success)
+        {
+            WriteRed(" error");
+            WriteLight($" ({repo.Error})", newline: false);
+
+            repo.ConsolePosition.Left += 6 + repo.Error.Length + 3;
+        }
+
+        if (withStatus && repo.Results.Status is not null)
+        {
+            var output = repo.Results.Status.Output ?? "";
+            var hasError = !repo.Results.Status.Success;
             var hasChanges = false;
 
             string message;
@@ -177,21 +202,56 @@ public static class ConsoleOutput
             else if (hasChanges) WriteYellow(message);
             else WriteGreen(message);
 
-            repository.ConsolePosition.Left += message.Length;
+            repo.ConsolePosition.Left += message.Length;
         }
 
         if (newline) Console.WriteLine();
     }
 
-    public static int WriteHeadersRepositories(GitRepository[] repositories)
+    public static void WriteHeaderSetHead(GitRepository repo, bool dynamically)
     {
-        var offset = Console.CursorTop + repositories.Length < Console.WindowHeight
+        if (dynamically) ClearHeaderDynamicallyActivity(repo);
+
+        if (repo.Results.SetHead is null) return;
+
+        var output = repo.Results.SetHead.Output ?? "";
+        var hasError = !repo.Results.SetHead.Success;
+        var didSet = false;
+
+        string message;
+        if (output.Contains("HEAD is now at", StringComparison.OrdinalIgnoreCase)) { message = "set HEAD"; didSet = true; }
+        else if (output.Contains(" is now created ", StringComparison.OrdinalIgnoreCase)) { message = "set HEAD"; didSet = true; }
+        else if (output.Contains(" is unchanged ", StringComparison.OrdinalIgnoreCase)) { message = "unchanged"; }
+        else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
+        else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
+        else { message = "unknown"; hasError = true; }
+
+        lock (_positionLock)
+        {
+            if (dynamically) Console.SetCursorPosition(repo.ConsolePosition.Left, repo.ConsolePosition.Top);
+
+            WriteLight(" ");
+            if (hasError) WriteRed(message);
+            else if (didSet) WriteGreen(message);
+            else WriteLight(message);
+        }
+
+        repo.ConsolePosition.Left += message.Length + 1;
+    }
+
+    public static int WriteHeadersRepositories(ExecutorResult<GitRepository>[] repositoryExecResults)
+    {
+        var offset = Console.CursorTop + repositoryExecResults.Length < Console.WindowHeight
             ? Console.CursorTop
-            : Console.WindowHeight - repositories.Length - 1;
+            : Console.WindowHeight - repositoryExecResults.Length - 1;
 
-        for (int i = 0; i < repositories.Length; i++) repositories[i].ConsolePosition.Top = i + offset;
+        for (int i = 0; i < repositoryExecResults.Length; i++)
+        {
+            var repoExecResult = repositoryExecResults[i];
+            if (repoExecResult.Object is not null) repoExecResult.Object.ConsolePosition.Top = i + offset;
+        }
 
-        foreach (var repo in repositories) WriteHeaderRepository(repo);
+        foreach (var repoExecResult in repositoryExecResults) WriteHeaderRepository(repoExecResult, withStatus: false, newline: true);
 
         return Console.CursorTop;
     }
