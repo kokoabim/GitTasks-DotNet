@@ -25,21 +25,37 @@ public static class ConsoleOutput
         var hasPositions = false;
         var commitPosition = repository.Results.CommitPosition.Object;
 
+        var output = repository.Results.CommitPosition.Output ?? "";
         string? aheadBy = null;
         string? behindBy = null;
+        string? errorMessage = null;
         if (!hasError && commitPosition is not null)
         {
             hasPositions = commitPosition.AheadBy > 0 || commitPosition.BehindBy > 0;
             if (commitPosition.AheadBy > 0) aheadBy = $" ↑{commitPosition.AheadBy}";
             if (commitPosition.BehindBy > 0) behindBy = $" ↓{commitPosition.BehindBy}";
         }
-        else hasError = true;
+        else
+        {
+            hasError = true;
+            if (output.Contains(" unknown revision ", StringComparison.OrdinalIgnoreCase)) errorMessage = "no remote";
+            else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase) || output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) errorMessage = output.ReplaceLineEndings().Replace('\n', ' ').Trim();
+        }
 
         lock (_positionLock)
         {
             if (dynamically) Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
 
-            if (hasError) { WriteRed(" position error"); repository.ConsolePosition.Left += 15; }
+            if (hasError)
+            {
+                WriteRed(" position error");
+                repository.ConsolePosition.Left += 15;
+                if (errorMessage is not null)
+                {
+                    WriteLight($" ({errorMessage})");
+                    repository.ConsolePosition.Left += errorMessage.Length + 3;
+                }
+            }
             else if (hasPositions)
             {
                 if (aheadBy is not null) { WriteGreen(aheadBy); repository.ConsolePosition.Left += aheadBy.Length; }
