@@ -231,6 +231,68 @@ public class Tasks
         return 0;
     }
 
+    public async Task<int> ResetAsync(ConsoleContext context)
+    {
+        var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
+        var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
+        if (repositoryExecResults.Length == 0)
+        {
+            Console.WriteLine($"No git repositories found: {path}");
+            return 0;
+        }
+
+        var showGitOutput = context.HasSwitch(Arguments.ShowGitOutputSwitch.Name);
+        var commit = context.GetOptionString(Arguments.CommitOption.Name);
+        var moveBack = context.GetOptionInt(Arguments.MoveBackOption.Name);
+        var resetMode = context.GetOptionEnum<GitResetMode>(Arguments.ResetModeOption.Name);
+
+        if (showGitOutput)
+        {
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                ConsoleOutput.WriteHeaderRepository(repoExecResult, withStatus: false, newline: false);
+
+                if (!repoExecResult.Success || repoExecResult.Object is null)
+                {
+                    Console.WriteLine();
+                    continue;
+                }
+
+                var repo = repoExecResult.Object;
+
+                repo.Results.Reset = await _git.ResetAsync(repo.Path, commit, resetMode, moveBack, context.CancellationToken);
+                ConsoleOutput.WriteHeaderReset(repo, dynamically: false);
+
+                Console.WriteLine();
+
+                if (!string.IsNullOrWhiteSpace(repo.Results.Reset.Output)) ConsoleOutput.WriteLight(repo.Results.Reset.Output, true);
+            }
+        }
+        else
+        {
+            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoryExecResults);
+
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                if (repoExecResult.Success) ConsoleOutput.WriteHeaderDynamicallyActivity(repoExecResult.Object);
+            }
+
+            await Task.WhenAll(repositoryExecResults.Where(r => r.Success).Select(r => _git.ResetAsync(r.Object!.Path, commit, resetMode, moveBack, context.CancellationToken)
+                .ContinueWith(t =>
+                {
+                    var repo = r.Object!;
+                    repo.Results.Reset = t.Result;
+                    ConsoleOutput.WriteHeaderReset(repo, dynamically: true);
+                },
+                context.CancellationToken)
+            ));
+
+            Console.SetCursorPosition(0, cursorTop);
+        }
+
+        return 0;
+    }
+
     public async Task<int> ShowStatusAsync(ConsoleContext context)
     {
         var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));

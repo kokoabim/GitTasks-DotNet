@@ -175,6 +175,36 @@ public class Git
         return result.WithReference(path);
     }
 
+    public ExecutorResult Reset(string path, string commit = "HEAD", GitResetMode resetType = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default)
+    {
+        if (back > 0) commit = $"{commit}~{back}";
+
+        var resetArg = resetType switch
+        {
+            GitResetMode.Hard => "--hard",
+            GitResetMode.Soft => "--soft",
+            _ => "--mixed"
+        };
+
+        var result = _executor.Execute("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithReference(path);
+    }
+
+    public async Task<ExecutorResult> ResetAsync(string path, string commit = "HEAD", GitResetMode mode = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default)
+    {
+        if (back > 0) commit = $"{commit}~{back}";
+
+        var resetArg = mode switch
+        {
+            GitResetMode.Soft => "--soft",
+            GitResetMode.Hard => "--hard",
+            _ => "--mixed"
+        };
+
+        var result = await _executor.ExecuteAsync("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken);
+        return result.WithReference(path);
+    }
+
     public ExecutorResult SetHead(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
     {
         if (branch is null && !automatically) return new ExecutorResult

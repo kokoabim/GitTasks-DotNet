@@ -31,6 +31,7 @@ public class GitRepositoryResults
     public ExecutorResult? Fetch { get; set; }
     public ExecutorResult? FullStatus { get; set; }
     public ExecutorResult? Pull { get; set; }
+    public ExecutorResult? Reset { get; set; }
     public ExecutorResult? SetHead { get; set; }
     public ExecutorResult? Status { get; set; }
 }

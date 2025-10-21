@@ -15,7 +15,7 @@ public class Commands
 
     public ConsoleCommand[] Generate()
     {
-        return [FixRefCommand(), MainCommand(), PullCommand(), StatusCommand()];
+        return [FixRefCommand(), MainCommand(), PullCommand(), ResetCommand(), StatusCommand()];
     }
 
     private ConsoleCommand FixRefCommand() => new(
@@ -47,6 +47,19 @@ public class Commands
             Arguments.ShowGitOutputSwitch
         ],
         asyncFunction: _tasks.PullBranchAsync
+    );
+
+    private ConsoleCommand ResetCommand() => new(
+        name: "reset",
+        titleText: "Reset git repository to a specific commit",
+        arguments: [
+            Arguments.PathArgument,
+            Arguments.CommitOption,
+            Arguments.ResetModeOption,
+            Arguments.MoveBackOption,
+            Arguments.ShowGitOutputSwitch
+        ],
+        asyncFunction: _tasks.ResetAsync
     );
 
     private ConsoleCommand StatusCommand() => new(

@@ -1,8 +1,11 @@
+using System.Text.RegularExpressions;
+
 namespace Kokoabim.GitTasks;
 
 public static class ConsoleOutput
 {
     private static readonly Lock _positionLock = new();
+    private static readonly Regex _resetCommitRegex = new(@" is now at (?<commit>[0-9a-f]+)", RegexOptions.Compiled);
 
     #region methods
 
@@ -222,6 +225,44 @@ public static class ConsoleOutput
         }
 
         if (newline) Console.WriteLine();
+    }
+
+    public static void WriteHeaderReset(GitRepository repo, bool dynamically)
+    {
+        if (dynamically) ClearHeaderDynamicallyActivity(repo);
+
+        if (repo.Results.Reset is null) return;
+
+        var output = repo.Results.Reset.Output ?? "";
+        var hasError = !repo.Results.Reset.Success;
+        var didReset = false;
+
+        string message;
+        if (!hasError && output == "") { message = "unchanged"; }
+        else if (!hasError && output.Contains(" is now at ", StringComparison.OrdinalIgnoreCase))
+        {
+            var commitHash = _resetCommitRegex.Match(output) is { } m && m.Success ? m.Groups["commit"].Value : null;
+            if (commitHash is not null) message = $"reset to {commitHash}";
+            else message = "reset";
+
+            didReset = true;
+        }
+        else if (output.Contains(" unknown revision or path not ", StringComparison.OrdinalIgnoreCase)) { message = "no such commit"; hasError = true; }
+        else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
+        else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
+        else { message = "unknown"; hasError = true; }
+
+        lock (_positionLock)
+        {
+            if (dynamically) Console.SetCursorPosition(repo.ConsolePosition.Left, repo.ConsolePosition.Top);
+
+            WriteLight(" ");
+            if (hasError) WriteRed(message);
+            else if (didReset) WriteGreen(message);
+            else WriteLight(message);
+        }
+
+        repo.ConsolePosition.Left += message.Length + 1;
     }
 
     public static void WriteHeaderSetHead(GitRepository repo, bool dynamically)
