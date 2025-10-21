@@ -247,6 +247,7 @@ public static class ConsoleOutput
 
             didReset = true;
         }
+        else if (!hasError && output.Contains("Unstaged changes after reset", StringComparison.OrdinalIgnoreCase)) { message = "reset with changes"; didReset = true; }
         else if (output.Contains(" unknown revision or path not ", StringComparison.OrdinalIgnoreCase)) { message = "no such commit"; hasError = true; }
         else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
         else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
