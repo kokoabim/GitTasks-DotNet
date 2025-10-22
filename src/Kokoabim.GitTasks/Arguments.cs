@@ -4,7 +4,32 @@ namespace Kokoabim.GitTasks;
 
 public static class Arguments
 {
-    public static readonly ConsoleArgument CommitOption = new(
+    #region properties
+
+    public static ConsoleArgument BranchOrCommitArgument => new(
+        type: ArgumentType.Positional,
+        name: "branch-or-commit",
+        helpText: "Branch name or commit hash",
+        isRequired: true
+    );
+
+    public static ConsoleArgument CleanDryRunSwitch => new(
+            type: ArgumentType.Switch,
+            identifier: "n",
+            name: "dry-run",
+            helpText: "Dry-run",
+            defaultValue: false
+        );
+
+    public static ConsoleArgument CleanOnlyIgnoredSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "X",
+        name: "only-ignored",
+        helpText: "Remove only ignored files",
+        defaultValue: false
+    );
+
+    public static ConsoleArgument CommitOption => new(
         type: ArgumentType.Option,
         identifier: "c",
         name: "commit",
@@ -12,14 +37,37 @@ public static class Arguments
         defaultValue: "HEAD"
     );
 
-    public static readonly ConsoleArgument FetchSwitch = new(
+    public static ConsoleArgument CreateBranchSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "b",
+        name: "create-branch",
+        helpText: "Create and switch to a new branch"
+    );
+
+    public static ConsoleArgument FetchSwitch => new(
         type: ArgumentType.Switch,
         identifier: "f",
         name: "fetch",
         helpText: "Fetch changes from remote"
     );
 
-    public static readonly ConsoleArgument MoveBackOption = new(
+    public static ConsoleArgument ForceSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "f",
+        name: "force",
+        helpText: "Force",
+        defaultValue: false
+    );
+
+    public static ConsoleArgument IgnoreIgnoredFilesSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "x",
+        name: "ignore-rules",
+        helpText: "Ignore .gitignore rules",
+        defaultValue: false
+    );
+
+    public static ConsoleArgument MoveBackOption => new(
         type: ArgumentType.Option,
         identifier: "b",
         name: "move-back",
@@ -28,26 +76,43 @@ public static class Arguments
         constraints: ArgumentConstraints.MustBeUInteger
     );
 
-    public static readonly ConsoleArgument PathArgument = new(
+    public static ConsoleArgument PathArgument => new(
         type: ArgumentType.Positional,
         name: "path",
-        helpText: "Path to git repository",
+        helpText: "Git repository path",
         defaultValue: ".",
         constraints: ArgumentConstraints.DirectoryMustExist
     );
 
-    public static readonly ConsoleArgument PendingChangesSwitch = new(
+    public static ConsoleArgument PendingChangesSwitch => new(
         type: ArgumentType.Switch,
         identifier: "p",
         name: "pending",
         helpText: "Show pending changes"
     );
 
+    #endregion 
+
     public static readonly ConsoleArgument PullSwitch = new(
         type: ArgumentType.Switch,
         identifier: "p",
         name: "pull",
         helpText: "Pull changes from remote"
+    );
+
+    public static readonly ConsoleArgument RecursivelySwitch = new(
+        type: ArgumentType.Switch,
+        identifier: "d",
+        name: "recursive",
+        helpText: "Recursively",
+        defaultValue: false
+    );
+
+    public static readonly ConsoleArgument ResetCleanSwitch = new(
+        type: ArgumentType.Switch,
+        identifier: "u",
+        name: "clean",
+        helpText: "Remove untracked files"
     );
 
     public static readonly ConsoleArgument ResetModeOption = new(

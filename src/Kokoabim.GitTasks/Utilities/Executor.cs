@@ -49,9 +49,10 @@ public class Executor
 
         try
         {
+
             if (!process.Start())
             {
-                result.Exception = new InvalidOperationException($"Failed to start process: {(string.IsNullOrWhiteSpace(workingDirectory) ? null : $"({workingDirectory}) ")}{fileName}");
+                result.Exception = new InvalidOperationException($"Failed to start process: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}");
                 return result;
             }
 
@@ -62,11 +63,11 @@ public class Executor
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 0x00000002)
         {
-            result.Exception = new FileNotFoundException($"File not found: {(string.IsNullOrWhiteSpace(workingDirectory) ? null : $"({workingDirectory}) ")}{fileName}", ex);
+            result.Exception = new FileNotFoundException($"File not found: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}", ex);
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 0x00000005)
         {
-            result.Exception = new UnauthorizedAccessException($"Access denied: {(string.IsNullOrWhiteSpace(workingDirectory) ? null : $"({workingDirectory}) ")}{fileName}", ex);
+            result.Exception = new UnauthorizedAccessException($"Access denied: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}", ex);
         }
         catch (Exception ex)
         {

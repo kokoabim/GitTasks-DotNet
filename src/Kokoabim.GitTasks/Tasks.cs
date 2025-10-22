@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Kokoabim.CommandLineInterface;
 
 namespace Kokoabim.GitTasks;
@@ -9,9 +10,99 @@ public class Tasks
     private readonly FileSystem _fileSystem = new();
     private readonly Git _git = new();
 
+    public async Task<int> CheckoutAsync(ConsoleContext context)
+    {
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
+        var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
+        if (repositoryExecResults.Length == 0)
+        {
+            Console.WriteLine($"No git repositories found: {path}");
+            return 0;
+        }
+
+        var branchOrCommit = context.GetString(Arguments.BranchOrCommitArgument.Name);
+        var createBranch = context.HasSwitch(Arguments.CreateBranchSwitch.Name);
+        var showGitOutput = context.HasSwitch(Arguments.ShowGitOutputSwitch.Name);
+
+        async Task<(bool flowControl, string? result)> matchCommitOrBranchNameAsync(GitRepository r, bool dynamically = false)
+        {
+            if (!branchOrCommit.Contains('*')) return (true, branchOrCommit);
+
+            var branchPattern = new Regex($"^{Regex.Escape(branchOrCommit).Replace("\\*", ".*")}$", RegexOptions.IgnoreCase);
+            r.Results.Branches = await _git.GetBranchesAsync(r.Path, context.CancellationToken);
+
+            var matchingBranches = r.Results.Branches.Success
+                ? r.Results.Branches.Object.Where(b => branchPattern.IsMatch(b.Name)).DistinctBy(b => b.Name).ToArray()
+                : null;
+
+            ConsoleOutput.WriteHeaderMatchBranch(r, matchingBranches, dynamically: dynamically);
+
+            if (matchingBranches?.Length == 1) return (true, matchingBranches[0].Name);
+            else return (false, null);
+        }
+
+        if (showGitOutput)
+        {
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                var repo = repoExecResult.Object;
+                if (repo is not null) repo.Results.Status = await _git.GetStatusAsync(repo.Path, porcelain: true, context.CancellationToken);
+
+                ConsoleOutput.WriteHeaderRepository(repoExecResult, withStatus: repo?.Results.Status is not null, newline: false);
+
+                if (!repoExecResult.Success || repo is null)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine(repoExecResult.ToString());
+                    continue;
+                }
+
+                var (flowControl, matchedBranchOrCommit) = await matchCommitOrBranchNameAsync(repo);
+                if (!flowControl)
+                {
+                    Console.WriteLine();
+                    continue;
+                }
+
+                repo.Results.Checkout = await _git.CheckoutAsync(repo.Path, matchedBranchOrCommit ?? branchOrCommit, createBranch, context.CancellationToken);
+                ConsoleOutput.WriteHeaderCheckout(repo, dynamically: false);
+
+                Console.WriteLine();
+
+                if (!string.IsNullOrWhiteSpace(repo.Results.Checkout.Output)) ConsoleOutput.WriteLight(repo.Results.Checkout.Output, true);
+            }
+        }
+        else
+        {
+            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoryExecResults);
+
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
+                ConsoleOutput.WriteHeaderDynamicallyActivity(repo);
+
+                repo.Results.Status = await _git.GetStatusAsync(repo.Path, porcelain: true, context.CancellationToken);
+                ConsoleOutput.WriteHeaderDynamicallyStatus(repo);
+
+                ConsoleOutput.WriteHeaderDynamicallyActivity(repo);
+
+                var (flowControl, matchedBranchOrCommit) = await matchCommitOrBranchNameAsync(repo, dynamically: true);
+                if (!flowControl) continue;
+
+                repo.Results.Checkout = await _git.CheckoutAsync(repo.Path, matchedBranchOrCommit ?? branchOrCommit, createBranch, context.CancellationToken);
+                ConsoleOutput.WriteHeaderCheckout(repo, dynamically: true);
+            }
+
+            Console.SetCursorPosition(0, cursorTop);
+        }
+        return 0;
+    }
+
     public async Task<int> CheckoutMainAsync(ConsoleContext context)
     {
-        var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
         if (repositoryExecResults.Length == 0)
         {
@@ -39,8 +130,8 @@ public class Tasks
 
             if (repo.DefaultBranch is not null)
             {
-                repo.Results.Checkout = _git.Checkout(repo.Path, repo.DefaultBranch, context.CancellationToken);
-                ConsoleOutput.WriteHeaderDynamicallyCheckout(repo);
+                repo.Results.Checkout = _git.Checkout(repo.Path, repo.DefaultBranch, createBranch: false, context.CancellationToken);
+                ConsoleOutput.WriteHeaderCheckout(repo, dynamically: true);
             }
 
             if (!pullSwitch && repo.CurrentBranch is not null)
@@ -73,9 +164,86 @@ public class Tasks
         return 0;
     }
 
+    public async Task<int> CleanAsync(ConsoleContext context)
+    {
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
+        var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
+        if (repositoryExecResults.Length == 0)
+        {
+            Console.WriteLine($"No git repositories found: {path}");
+            return 0;
+        }
+
+        var cleanOnlyIgnored = context.HasSwitch(Arguments.CleanOnlyIgnoredSwitch.Name);
+        var dryRun = context.HasSwitch(Arguments.CleanDryRunSwitch.Name);
+        var force = context.HasSwitch(Arguments.ForceSwitch.Name);
+        var ignoreIgnoreRules = context.HasSwitch(Arguments.IgnoreIgnoredFilesSwitch.Name);
+        var recursively = context.HasSwitch(Arguments.RecursivelySwitch.Name);
+        var showGitOutput = context.HasSwitch(Arguments.ShowGitOutputSwitch.Name);
+
+        if (showGitOutput || dryRun)
+        {
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                ConsoleOutput.WriteHeaderRepository(repoExecResult, withStatus: false, newline: false);
+
+                if (!repoExecResult.Success || repoExecResult.Object is null)
+                {
+                    Console.WriteLine();
+                    continue;
+                }
+
+                var repo = repoExecResult.Object;
+
+                repo.Results.Clean = await _git.CleanAsync(repo.Path, recursively, force, ignoreIgnoreRules, cleanOnlyIgnored, dryRun, context.CancellationToken);
+                ConsoleOutput.WriteHeaderClean(repo, dynamically: false);
+
+                Console.WriteLine();
+
+                if (!string.IsNullOrWhiteSpace(repo.Results.Clean.Output)) ConsoleOutput.WriteLight(repo.Results.Clean.Output, true);
+            }
+        }
+        else
+        {
+            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoryExecResults);
+
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
+                ConsoleOutput.WriteHeaderDynamicallyActivity(repo);
+            }
+
+            var tasks = repositoryExecResults.Where(r => r.Success).ToDictionary(
+                r => r.Object!,
+                r => Task.Run(async () =>
+                {
+                    var repo = r.Object!;
+                    repo.Results.Clean = await _git.CleanAsync(repo.Path, recursively, force, ignoreIgnoreRules, cleanOnlyIgnored, dryRun, context.CancellationToken);
+                },
+                context.CancellationToken));
+
+            foreach (var repoExecResult in repositoryExecResults)
+            {
+                if (!repoExecResult.Success || repoExecResult.Object is null) continue;
+                var repo = repoExecResult.Object;
+
+                var task = tasks[repo];
+                if (!task.IsCompleted) await task;
+
+                ConsoleOutput.WriteHeaderClean(repo, dynamically: true);
+            }
+
+            Console.SetCursorPosition(0, cursorTop);
+        }
+
+        return 0;
+    }
+
     public async Task<int> FixReferenceAsync(ConsoleContext context)
     {
-        var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
         if (repositoryExecResults.Length == 0)
         {
@@ -155,7 +323,7 @@ public class Tasks
 
     public async Task<int> PullBranchAsync(ConsoleContext context)
     {
-        var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
         if (repositoryExecResults.Length == 0)
         {
@@ -233,7 +401,7 @@ public class Tasks
 
     public async Task<int> ResetAsync(ConsoleContext context)
     {
-        var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
         if (repositoryExecResults.Length == 0)
         {
@@ -241,10 +409,11 @@ public class Tasks
             return 0;
         }
 
-        var showGitOutput = context.HasSwitch(Arguments.ShowGitOutputSwitch.Name);
+        var clean = context.HasSwitch(Arguments.ResetCleanSwitch.Name);
         var commit = context.GetOptionString(Arguments.CommitOption.Name);
         var moveBack = context.GetOptionInt(Arguments.MoveBackOption.Name);
         var resetMode = context.GetOptionEnum<GitResetMode>(Arguments.ResetModeOption.Name);
+        var showGitOutput = context.HasSwitch(Arguments.ShowGitOutputSwitch.Name);
 
         if (showGitOutput)
         {
@@ -263,9 +432,16 @@ public class Tasks
                 repo.Results.Reset = await _git.ResetAsync(repo.Path, commit, resetMode, moveBack, context.CancellationToken);
                 ConsoleOutput.WriteHeaderReset(repo, dynamically: false);
 
+                if (repo.Results.Reset.Success && clean)
+                {
+                    repo.Results.Clean = await _git.CleanAsync(repo.Path, recursively: true, force: true, ignoreIgnoreRules: false, cleanOnlyIgnored: false, dryRun: false, context.CancellationToken);
+                    ConsoleOutput.WriteHeaderClean(repo, dynamically: false);
+                }
+
                 Console.WriteLine();
 
                 if (!string.IsNullOrWhiteSpace(repo.Results.Reset.Output)) ConsoleOutput.WriteLight(repo.Results.Reset.Output, true);
+                if (clean && repo.Results.Clean is not null && !string.IsNullOrWhiteSpace(repo.Results.Clean.Output)) ConsoleOutput.WriteLight(repo.Results.Clean.Output, true);
             }
         }
         else
@@ -283,6 +459,14 @@ public class Tasks
                     var repo = r.Object!;
                     repo.Results.Reset = t.Result;
                     ConsoleOutput.WriteHeaderReset(repo, dynamically: true);
+
+                    ConsoleOutput.WriteHeaderDynamicallyActivity(repo);
+
+                    if (repo.Results.Reset.Success && clean)
+                    {
+                        repo.Results.Clean = _git.Clean(repo.Path, recursively: true, force: true, ignoreIgnoreRules: false, cleanOnlyIgnored: false, dryRun: false, context.CancellationToken);
+                        ConsoleOutput.WriteHeaderClean(repo, dynamically: true);
+                    }
                 },
                 context.CancellationToken)
             ));
@@ -295,7 +479,7 @@ public class Tasks
 
     public async Task<int> ShowStatusAsync(ConsoleContext context)
     {
-        var path = _fileSystem.GetFullPath(context.GetString(Arguments.PathArgument.Name));
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResults = _git.GetRepositories(path, context.CancellationToken);
         if (repositoryExecResults.Length == 0)
         {

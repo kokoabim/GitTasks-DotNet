@@ -27,6 +27,7 @@ public class GitRepositoryResults
 {
     public ExecutorResult<GitBranch[]>? Branches { get; set; }
     public ExecutorResult? Checkout { get; set; }
+    public ExecutorResult? Clean { get; set; }
     public ExecutorResult<GitCommitPosition>? CommitPosition { get; set; }
     public ExecutorResult? Fetch { get; set; }
     public ExecutorResult? FullStatus { get; set; }

@@ -9,21 +9,72 @@ public class Git
 
     #region methods
 
-    public ExecutorResult Checkout(string path, string branch, CancellationToken cancellationToken = default) =>
-        _executor.Execute("git", $"checkout {branch}", workingDirectory: path, cancellationToken: cancellationToken);
-
-    public async Task<ExecutorResult> CheckoutAsync(string path, string branch, CancellationToken cancellationToken = default)
+    public ExecutorResult Checkout(string path, string branch, bool createBranch, CancellationToken cancellationToken = default)
     {
-        var currentBranch = await GetCurrentBranchAsync(path, cancellationToken);
-        return currentBranch.Output == branch
-            ? currentBranch
-            : await _executor.ExecuteAsync("git", $"checkout {branch}", workingDirectory: path, cancellationToken: cancellationToken);
+        var args = "checkout";
+        if (createBranch) args += " -b";
+        args += $" {branch}";
+
+        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+    }
+
+    public async Task<ExecutorResult> CheckoutAsync(string path, string branch, bool createBranch, CancellationToken cancellationToken = default)
+    {
+        var args = "checkout";
+        if (createBranch) args += " -b";
+        args += $" {branch}";
+
+        return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
+    }
+
+    public ExecutorResult Clean(string path, bool recursively, bool force, bool ignoreIgnoreRules, bool cleanOnlyIgnored, bool dryRun, CancellationToken cancellationToken)
+    {
+        if (cleanOnlyIgnored && ignoreIgnoreRules)
+        {
+            return new ExecutorResult
+            {
+                ExitCode = 1,
+                Output = "Cannot use both 'only-ignored' and 'ignore-rules' switches together.",
+                Reference = path,
+            };
+        }
+
+        var args = "clean";
+        if (recursively) args += " -d";
+        if (force) args += " -f";
+        if (ignoreIgnoreRules) args += " -x";
+        if (cleanOnlyIgnored) args += " -X";
+        if (dryRun) args += " -n";
+
+        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+    }
+
+    public async Task<ExecutorResult> CleanAsync(string path, bool recursively, bool force, bool ignoreIgnoreRules, bool cleanOnlyIgnored, bool dryRun, CancellationToken cancellationToken)
+    {
+        if (cleanOnlyIgnored && ignoreIgnoreRules)
+        {
+            return new ExecutorResult
+            {
+                ExitCode = 1,
+                Output = "Cannot use both 'only-ignored' and 'ignore-rules' switches together.",
+                Reference = path,
+            };
+        }
+
+        var args = "clean";
+        if (recursively) args += " -d";
+        if (force) args += " -f";
+        if (ignoreIgnoreRules) args += " -x";
+        if (cleanOnlyIgnored) args += " -X";
+        if (dryRun) args += " -n";
+
+        return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
     }
 
     public async Task<ExecutorResult> FetchAsync(string path, string? branch = null, CancellationToken cancellationToken = default)
     {
         var args = branch is null ? "fetch" : $"fetch origin {branch}";
-        return await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken);
+        return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
     }
 
     public ExecutorResult<GitBranch[]> GetBranches(string path, CancellationToken cancellationToken = default)
@@ -38,8 +89,7 @@ public class Git
 
     public async Task<ExecutorResult<GitBranch[]>> GetBranchesAsync(string path, CancellationToken cancellationToken = default)
     {
-        var result = await _executor.ExecuteAsync("git", "branch --all", workingDirectory: path, cancellationToken: cancellationToken);
-        result.Reference = path;
+        var result = (await _executor.ExecuteAsync("git", "branch --all", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
         if (!result.Success) return result.WithNull<GitBranch[]>();
 
         var branches = result.Output.Trim().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(GitBranch.Parse).ToArray();
@@ -48,12 +98,10 @@ public class Git
 
     public ExecutorResult<GitCommitPosition> GetCommitPosition(string path, string? branch = null, CancellationToken cancellationToken = default)
     {
-        var execResult = _executor.Execute("git", $"rev-list --left-right --count \"origin/{branch}...{branch}\"", workingDirectory: path, cancellationToken: cancellationToken);
-        execResult.Reference = path;
+        var execResult = _executor.Execute("git", $"rev-list --left-right --count \"origin/{branch}...{branch}\"", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
         if (!execResult.Success) return execResult.WithNull<GitCommitPosition>();
 
         var parts = execResult.Output.Trim().Split(['\t', ' '], 2, StringSplitOptions.RemoveEmptyEntries);
-
         if (parts.Length == 2 && int.TryParse(parts[0], out var behindBy) && int.TryParse(parts[1], out var aheadBy))
         {
             return execResult.WithObject(new GitCommitPosition
@@ -130,15 +178,13 @@ public class Git
     public ExecutorResult GetStatus(string path, bool porcelain = false, CancellationToken cancellationToken = default)
     {
         var args = porcelain ? "status --porcelain" : "status";
-        var result = _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithReference(path);
+        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
     public async Task<ExecutorResult> GetStatusAsync(string path, bool porcelain = false, CancellationToken cancellationToken = default)
     {
         var args = porcelain ? "status --porcelain" : "status";
-        var result = await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithReference(path);
+        return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
     }
 
     public string[] GetSubmoduleDirectories(string path, CancellationToken cancellationToken = default)
@@ -169,11 +215,8 @@ public class Git
         return result.Success ? result.Output.Trim() : null;
     }
 
-    public async Task<ExecutorResult> PullAsync(string path, CancellationToken cancellationToken = default)
-    {
-        var result = await _executor.ExecuteAsync("git", "pull", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithReference(path);
-    }
+    public async Task<ExecutorResult> PullAsync(string path, CancellationToken cancellationToken = default) =>
+        (await _executor.ExecuteAsync("git", "pull", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
 
     public ExecutorResult Reset(string path, string commit = "HEAD", GitResetMode resetType = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default)
     {
@@ -186,8 +229,7 @@ public class Git
             _ => "--mixed"
         };
 
-        var result = _executor.Execute("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithReference(path);
+        return _executor.Execute("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
     public async Task<ExecutorResult> ResetAsync(string path, string commit = "HEAD", GitResetMode mode = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default)
@@ -201,8 +243,7 @@ public class Git
             _ => "--mixed"
         };
 
-        var result = await _executor.ExecuteAsync("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithReference(path);
+        return (await _executor.ExecuteAsync("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
     }
 
     public ExecutorResult SetHead(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
@@ -215,8 +256,7 @@ public class Git
         };
 
         var arg = branch is not null ? branch : "--auto"; // 'automatically' is true if branch is null
-        var result = _executor.Execute("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithReference(path);
+        return _executor.Execute("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
     public async Task<ExecutorResult> SetHeadAsync(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
@@ -229,8 +269,7 @@ public class Git
         };
 
         var arg = branch is not null ? branch : "--auto"; // 'automatically' is true if branch is null
-        var result = await _executor.ExecuteAsync("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithReference(path);
+        return (await _executor.ExecuteAsync("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
     }
 
     private ExecutorResult<GitRepository> GetRepository(string path, bool isSubmodule, CancellationToken cancellationToken = default)

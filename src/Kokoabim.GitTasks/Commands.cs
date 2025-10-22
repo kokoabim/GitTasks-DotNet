@@ -15,8 +15,43 @@ public class Commands
 
     public ConsoleCommand[] Generate()
     {
-        return [FixRefCommand(), MainCommand(), PullCommand(), ResetCommand(), StatusCommand()];
+        return [
+            CheckoutCommand(),
+            CleanCommand(),
+            FixRefCommand(),
+            MainCommand(),
+            PullCommand(),
+            ResetCommand(),
+            StatusCommand()
+        ];
     }
+
+    private ConsoleCommand CheckoutCommand() => new(
+        name: "checkout",
+        titleText: "Checkout a specific branch or commit",
+        arguments: [
+            Arguments.BranchOrCommitArgument,
+            Arguments.PathArgument,
+            Arguments.CreateBranchSwitch,
+            Arguments.ShowGitOutputSwitch
+        ],
+        asyncFunction: _tasks.CheckoutAsync
+    );
+
+    private ConsoleCommand CleanCommand() => new(
+        name: "clean",
+        titleText: "Remove untracked files",
+        arguments: [
+            Arguments.PathArgument,
+            Arguments.RecursivelySwitch,
+            Arguments.ForceSwitch,
+            Arguments.IgnoreIgnoredFilesSwitch,
+            Arguments.CleanOnlyIgnoredSwitch,
+            Arguments.CleanDryRunSwitch,
+            Arguments.ShowGitOutputSwitch
+        ],
+        asyncFunction: _tasks.CleanAsync
+    );
 
     private ConsoleCommand FixRefCommand() => new(
         name: "fix-ref",
@@ -57,6 +92,7 @@ public class Commands
             Arguments.CommitOption,
             Arguments.ResetModeOption,
             Arguments.MoveBackOption,
+            Arguments.ResetCleanSwitch,
             Arguments.ShowGitOutputSwitch
         ],
         asyncFunction: _tasks.ResetAsync

@@ -4,8 +4,10 @@ namespace Kokoabim.GitTasks;
 
 public static class ConsoleOutput
 {
+    private static readonly Regex _alreadyOnBranchRegex = new(@"^already on '(?<branch>[^']+)'", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Lock _positionLock = new();
-    private static readonly Regex _resetCommitRegex = new(@" is now at (?<commit>[0-9a-f]+)", RegexOptions.Compiled);
+    private static readonly Regex _resetCommitRegex = new(@" is now at (?<commit>[0-9a-f]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex _switchedToBranchRegex = new(@"^switched to( a new)? branch '(?<branch>[^']+)'", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     #region methods
 
@@ -16,6 +18,106 @@ public static class ConsoleOutput
             Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
             WriteNormal("    ");
         }
+    }
+
+    public static void WriteHeaderCheckout(GitRepository repository, bool dynamically)
+    {
+        if (dynamically) ClearHeaderDynamicallyActivity(repository);
+
+        if (repository.Results.Checkout is null) return;
+
+        var output = repository.Results.Checkout.Output ?? "";
+        var hasError = !repository.Results.Checkout.Success;
+        var didSwitch = false;
+
+        string message;
+        if (output.Contains("already on", StringComparison.OrdinalIgnoreCase))
+        {
+            var branch = _alreadyOnBranchRegex.Match(output) is { } m && m.Success ? m.Groups["branch"].Value : null;
+            if (branch is not null) message = $"already on {branch}";
+            else message = "already on branch";
+        }
+        else if (output.Contains("switched to branch", StringComparison.OrdinalIgnoreCase))
+        {
+            var branch = _switchedToBranchRegex.Match(output) is { } m && m.Success ? m.Groups["branch"].Value : null;
+            if (branch is not null) message = $"switched to {branch}";
+            else message = "switched";
+            didSwitch = true;
+        }
+        else if (output.Contains("switched to a new branch", StringComparison.OrdinalIgnoreCase))
+        {
+            var branch = _switchedToBranchRegex.Match(output) is { } m && m.Success ? m.Groups["branch"].Value : null;
+            if (branch is not null) message = $"switched to new branch {branch}";
+            else message = "switched to new branch";
+            didSwitch = true;
+        }
+        else if (output.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase)) { message = "local changes would be overwritten"; hasError = true; }
+        else if (output.Contains("did not match", StringComparison.OrdinalIgnoreCase)) { message = "no match"; hasError = true; }
+        else if (output.Contains("not a symbolic ref", StringComparison.OrdinalIgnoreCase)) { message = "not a symbolic ref (use fix-ref to fix)"; hasError = true; }
+        else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
+        else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
+        else { message = "unknown"; hasError = true; }
+
+        lock (_positionLock)
+        {
+            if (dynamically) Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
+
+            WriteLight(" ");
+            if (hasError) WriteRed(message);
+            else if (didSwitch) WriteGreen(message);
+            else WriteLight(message);
+        }
+
+        repository.ConsolePosition.Left += message.Length + 1;
+    }
+
+    public static void WriteHeaderClean(GitRepository repository, bool dynamically)
+    {
+        if (dynamically) ClearHeaderDynamicallyActivity(repository);
+
+        if (repository.Results.Clean is null) return;
+
+        var output = repository.Results.Clean.Output ?? "";
+        var hasError = !repository.Results.Clean.Success;
+        var didClean = false;
+
+        string message;
+        if (!hasError && string.IsNullOrWhiteSpace(output)) { message = "nothing to clean"; }
+        else if (!hasError)
+        {
+            var files = 0;
+            var dirs = 0;
+            var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                if (line.StartsWith("Removing ", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (line.EndsWith('/')) dirs++;
+                    else files++;
+                }
+            }
+
+            message = "cleaned";
+            if (dirs > 0) message += $" {dirs} dir{(dirs == 1 ? "" : "s")}";
+            if (files > 0) message += $" {files} file{(files == 1 ? "" : "s")}";
+
+            didClean = true;
+        }
+        else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
+        else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
+        else { message = "unknown"; hasError = true; }
+
+        lock (_positionLock)
+        {
+            if (dynamically) Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
+
+            WriteLight(" ");
+            if (hasError) WriteRed(message);
+            else if (didClean) WriteGreen(message);
+            else WriteLight(message);
+        }
+
+        repository.ConsolePosition.Left += message.Length + 1;
     }
 
     public static void WriteHeaderCommitPosition(GitRepository repository, bool dynamically)
@@ -76,37 +178,6 @@ public static class ConsoleOutput
         }
     }
 
-    public static void WriteHeaderDynamicallyCheckout(GitRepository repository)
-    {
-        if (repository.Results.Checkout is null) return;
-
-        var output = repository.Results.Checkout.Output ?? "";
-        var hasError = !repository.Results.Checkout.Success;
-        var didSwitch = false;
-
-        string message;
-        if (output.Contains("already on", StringComparison.OrdinalIgnoreCase)) message = "already on branch";
-        else if (output.Contains("switched to branch", StringComparison.OrdinalIgnoreCase)) { message = "switched"; didSwitch = true; }
-        else if (output.Contains("switched to a new branch", StringComparison.OrdinalIgnoreCase)) { message = "switched to new branch"; didSwitch = true; }
-        else if (output.Contains("did not match", StringComparison.OrdinalIgnoreCase)) { message = "no match"; hasError = true; }
-        else if (output.Contains("not a symbolic ref", StringComparison.OrdinalIgnoreCase)) { message = "not a symbolic ref (use fix-ref to fix)"; hasError = true; }
-        else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
-        else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
-        else { message = "unknown"; hasError = true; }
-
-        lock (_positionLock)
-        {
-            Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
-
-            WriteLight(" ");
-            if (hasError) WriteRed(message);
-            else if (didSwitch) WriteGreen(message);
-            else WriteLight(message);
-        }
-
-        repository.ConsolePosition.Left += message.Length + 1;
-    }
-
     public static void WriteHeaderDynamicallyStatus(GitRepository repository)
     {
         if (repository.Results.Status is null) return;
@@ -133,6 +204,31 @@ public static class ConsoleOutput
         }
 
         repository.ConsolePosition.Left += message.Length;
+    }
+
+    public static void WriteHeaderMatchBranch(GitRepository r, GitBranch[]? matchingBranches, bool dynamically)
+    {
+        if (dynamically) ClearHeaderDynamicallyActivity(r);
+
+        string? message = null;
+        string? branches = null;
+        if (matchingBranches is null) message = " failed to get branches";
+        else if (matchingBranches.Length == 0) message = " no matches";
+        else if (matchingBranches.Length > 1)
+        {
+            message = " multiple matches ";
+            branches = string.Join(", ", matchingBranches.Select(b => b.Name));
+        }
+
+        lock (_positionLock)
+        {
+            if (dynamically) Console.SetCursorPosition(r.ConsolePosition.Left, r.ConsolePosition.Top);
+
+            if (message is not null) WriteRed(message);
+            if (branches is not null) WriteLight(branches);
+        }
+
+        r.ConsolePosition.Left += (message?.Length ?? 0) + (branches?.Length ?? 0);
     }
 
     public static void WriteHeaderPull(GitRepository repository, bool dynamically)
@@ -320,6 +416,14 @@ public static class ConsoleOutput
         else Console.Write($"\x1b[2m{text}\x1b[0m");
     }
 
+    public static void WriteRed(string text, bool newline = false)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        if (newline) Console.WriteLine(text);
+        else Console.Write(text);
+        Console.ResetColor();
+    }
+
     private static void WriteBlue(string text)
     {
         Console.ForegroundColor = ConsoleColor.Blue;
@@ -342,13 +446,6 @@ public static class ConsoleOutput
     {
         Console.ResetColor();
         Console.Write($"\x1b[0m{text}");
-    }
-
-    private static void WriteRed(string text)
-    {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.Write(text);
-        Console.ResetColor();
     }
 
     private static void WriteUnderline(string text) => Console.Write($"\x1b[4m{text}\x1b[0m");
