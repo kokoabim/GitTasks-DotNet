@@ -477,6 +477,35 @@ public class Tasks
         return 0;
     }
 
+    public async Task<int> SetSubmoduleIgnoreOptionAsync(ConsoleContext context)
+    {
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
+        var repositoryExecResult = _git.GetRepository(path, context.CancellationToken);
+        if (repositoryExecResult is null)
+        {
+            Console.WriteLine($"Not a git repository: {path}");
+            return 1;
+        }
+
+        var repo = repositoryExecResult.Object!;
+        var ignoreOption = context.GetEnumOrDefault<GitSubmoduleIgnoreOption>(Arguments.SubmoduleIgnoreArgument.Name);
+        if (ignoreOption is null)
+        {
+            Console.WriteLine($"Invalid submodule ignore option: {context.GetString(Arguments.SubmoduleIgnoreArgument.Name)}");
+            return 1;
+        }
+
+        var setIgnoreOptionResult = _git.SetSubmoduleIgnoreOption(repo.Path, ignoreOption.Value, context.CancellationToken);
+        if (!setIgnoreOptionResult.Success)
+        {
+            Console.WriteLine($"Failed to set submodule ignore option: {setIgnoreOptionResult.Output}");
+            return 1;
+        }
+
+        Console.WriteLine($"Set submodule ignore option to '{ignoreOption.Value}' in repository: {repo.Path}");
+        return 0;
+    }
+
     public async Task<int> ShowStatusAsync(ConsoleContext context)
     {
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");

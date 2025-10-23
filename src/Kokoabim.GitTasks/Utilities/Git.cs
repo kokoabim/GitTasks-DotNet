@@ -175,6 +175,11 @@ public class Git
         return [.. results.OrderBy(r => r.Object!.Path).ForEach(r => r.Object!.SetRelativePath(path))];
     }
 
+    public ExecutorResult<GitRepository?> GetRepository(string path, CancellationToken cancellationToken = default) =>
+        _fileSystem.IsGitDirectory(path)
+            ? GetRepository(path, isSubmodule: false, cancellationToken).AsNullable()
+            : ExecutorResult.CreateWithNull<GitRepository>(path);
+
     public ExecutorResult GetStatus(string path, bool porcelain = false, CancellationToken cancellationToken = default)
     {
         var args = porcelain ? "status --porcelain" : "status";
@@ -270,6 +275,50 @@ public class Git
 
         var arg = branch is not null ? branch : "--auto"; // 'automatically' is true if branch is null
         return (await _executor.ExecuteAsync("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
+    }
+
+    public ExecutorResult SetSubmoduleIgnoreOption(string path, GitSubmoduleIgnoreOption ignoreOption, CancellationToken cancellationToken = default)
+    {
+        if (!_fileSystem.FileExists(path, ".gitmodules"))
+        {
+            return new ExecutorResult
+            {
+                ExitCode = 1,
+                Output = "No .gitmodules file found",
+                Reference = path,
+            };
+        }
+
+        var didParse = GitModulesFile.TryParse(path, ".gitmodules", out var gitModulesFile, out var errorMessage);
+        if (!didParse)
+        {
+            return new ExecutorResult
+            {
+                ExitCode = 1,
+                Output = errorMessage,
+                Reference = path,
+            };
+        }
+
+        gitModulesFile!.Submodules.ForEach(sm => sm.Ignore = ignoreOption);
+
+        var didWrite = gitModulesFile.TryWrite(overwrite: true, out errorMessage);
+        if (!didWrite)
+        {
+            return new ExecutorResult
+            {
+                ExitCode = 1,
+                Output = errorMessage,
+                Reference = path,
+            };
+        }
+
+        return new ExecutorResult
+        {
+            ExitCode = 0,
+            Output = "Updated .gitmodules file",
+            Reference = path,
+        };
     }
 
     private ExecutorResult<GitRepository> GetRepository(string path, bool isSubmodule, CancellationToken cancellationToken = default)

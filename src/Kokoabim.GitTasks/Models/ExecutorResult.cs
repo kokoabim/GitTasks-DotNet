@@ -13,6 +13,11 @@ public class ExecutorResult
     [MemberNotNullWhen(true, nameof(Output))]
     public bool Success => ExitCode == 0 && !Killed && Exception is null && Output is not null;
 
+    public static ExecutorResult<T?> CreateWithNull<T>(object? reference = null) => new()
+    {
+        Reference = reference
+    };
+
     public static ExecutorResult<T> CreateWithObject<T>(T? obj, object? reference = null) => new()
     {
         ExitCode = 0,
@@ -55,6 +60,19 @@ public class ExecutorResult<T> : ExecutorResult
 
     [MemberNotNullWhen(true, nameof(Object))]
     public new bool Success => base.Success && Object is not null;
+
+    public ExecutorResult<T?> AsNullable()
+    {
+        return new ExecutorResult<T?>
+        {
+            Exception = Exception,
+            ExitCode = ExitCode,
+            Killed = Killed,
+            Output = Output,
+            Reference = Reference,
+            Object = Object
+        };
+    }
 
     public new ExecutorResult<T> WithReference(object? reference)
     {

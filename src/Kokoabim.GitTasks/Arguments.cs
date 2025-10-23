@@ -125,6 +125,15 @@ public static class Arguments
         constraintType: typeof(GitResetMode)
     );
 
+    public static readonly ConsoleArgument SubmoduleIgnoreArgument = new(
+        type: ArgumentType.Positional,
+        name: "ignore-option",
+        helpText: "Submodule ignore option (none, untracked, dirty, all; default: none)",
+        defaultValue: "none",
+        constraints: ArgumentConstraints.MustConvertToType,
+        constraintType: typeof(GitSubmoduleIgnoreOption)
+    );
+
     public static readonly ConsoleArgument ShowGitOutputSwitch = new(
         type: ArgumentType.Switch,
         identifier: "s",

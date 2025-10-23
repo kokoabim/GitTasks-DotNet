@@ -22,7 +22,8 @@ public class Commands
             MainCommand(),
             PullCommand(),
             ResetCommand(),
-            StatusCommand()
+            StatusCommand(),
+            SetSubmoduleIgnoreOptionCommand()
         ];
     }
 
@@ -96,6 +97,17 @@ public class Commands
             Arguments.ShowGitOutputSwitch
         ],
         asyncFunction: _tasks.ResetAsync
+    );
+
+    private ConsoleCommand SetSubmoduleIgnoreOptionCommand() => new(
+        name: "submodule-set-ignore",
+        titleText: "Set submodule ignore option",
+        arguments: [
+            Arguments.SubmoduleIgnoreArgument,
+            Arguments.PathArgument,
+            Arguments.ShowGitOutputSwitch
+        ],
+        asyncFunction: _tasks.SetSubmoduleIgnoreOptionAsync
     );
 
     private ConsoleCommand StatusCommand() => new(

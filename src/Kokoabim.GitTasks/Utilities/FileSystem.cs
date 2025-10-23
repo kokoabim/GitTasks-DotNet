@@ -2,12 +2,21 @@ namespace Kokoabim.GitTasks;
 
 public interface IFileSystem
 {
+    bool FileExists(string path);
+    bool FileExists(string path, string fileName);
     string GetFullPath(string path);
     string[] GetGitDirectories(string path);
+    bool IsGitDirectory(string path);
+    string? ReadFile(string path, string? fileName = null);
+    Task<string?> ReadFileAsync(string path, string? fileName = null);
 }
 
 public class FileSystem : IFileSystem
 {
+    public bool FileExists(string path) => File.Exists(path);
+
+    public bool FileExists(string path, string fileName) => File.Exists(Path.Combine(path, fileName));
+
     public string GetFullPath(string path)
     {
         path = Path.GetFullPath(path);
@@ -22,10 +31,33 @@ public class FileSystem : IFileSystem
         return [.. directories];
     }
 
-    private static void GetGitDirectories(List<string> directories, string path, int depth)
+    public bool IsGitDirectory(string path)
     {
-        if (Directory.Exists(Path.Combine(path, ".git"))) directories.Add(path);
-        else if (File.Exists(Path.Combine(path, ".git")) && File.ReadAllText(Path.Combine(path, ".git")).StartsWith("gitdir:")) directories.Add(path);
+        path = GetFullPath(path);
+        return Directory.Exists(Path.Combine(path, ".git")) ||
+               (File.Exists(Path.Combine(path, ".git")) && File.ReadAllText(Path.Combine(path, ".git")).StartsWith("gitdir:"));
+    }
+
+    public string? ReadFile(string path, string? fileName = null)
+    {
+        if (fileName != null) path = Path.Combine(path, fileName);
+
+        try { return File.ReadAllText(path); }
+        catch { return null; }
+    }
+
+    public async Task<string?> ReadFileAsync(string path, string? fileName = null)
+    {
+        if (fileName != null) path = Path.Combine(path, fileName);
+
+        using var reader = new StreamReader(path);
+        try { return await reader.ReadToEndAsync(); }
+        catch { return null; }
+    }
+
+    private void GetGitDirectories(List<string> directories, string path, int depth)
+    {
+        if (IsGitDirectory(path)) directories.Add(path);
 
         if (depth > 0) foreach (var d in Directory.GetDirectories(path)) GetGitDirectories(directories, d, depth - 1);
     }
