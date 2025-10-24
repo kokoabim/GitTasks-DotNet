@@ -9,6 +9,7 @@ public class Tasks
 
     private readonly FileSystem _fileSystem = new();
     private readonly Git _git = new();
+    private static readonly Regex _submoduleNewCommitsMatcher = new(@"modified:\s+(?<path>.+)\s+\(new commits\)", RegexOptions.Compiled);
 
     public async Task<int> CheckoutAsync(ConsoleContext context)
     {
@@ -481,9 +482,9 @@ public class Tasks
     {
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResult = _git.GetRepository(path, context.CancellationToken);
-        if (repositoryExecResult is null)
+        if (!repositoryExecResult.Success || repositoryExecResult.Object?.Success is false)
         {
-            Console.WriteLine($"Not a git repository: {path}");
+            Console.WriteLine(repositoryExecResult.Object?.Error ?? repositoryExecResult.Output);
             return 1;
         }
 
@@ -495,14 +496,14 @@ public class Tasks
             return 1;
         }
 
-        var setIgnoreOptionResult = _git.SetSubmoduleIgnoreOption(repo.Path, ignoreOption.Value, context.CancellationToken);
-        if (!setIgnoreOptionResult.Success)
+        var setIgnoreOptionExecResult = _git.SetSubmoduleIgnoreOption(repo.Path, ignoreOption.Value, context.CancellationToken);
+        if (!setIgnoreOptionExecResult.Success)
         {
-            Console.WriteLine($"Failed to set submodule ignore option: {setIgnoreOptionResult.Output}");
+            Console.WriteLine($"Failed to set submodule ignore option: {setIgnoreOptionExecResult.Output}");
             return 1;
         }
 
-        Console.WriteLine($"Set submodule ignore option to '{ignoreOption.Value}' in repository: {repo.Path}");
+        Console.WriteLine($"Set submodule ignore option to '{ignoreOption.Value}'.");
         return 0;
     }
 
@@ -610,5 +611,104 @@ public class Tasks
         }
 
         return 0;
+    }
+
+    public async Task<int> UpdateSubmoduleCommitsAsync(ConsoleContext context)
+    {
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
+        var repositoryExecResult = _git.GetRepository(path, context.CancellationToken);
+        if (!repositoryExecResult.Success || repositoryExecResult.Object?.Success is false)
+        {
+            Console.WriteLine(repositoryExecResult.Object?.Error ?? repositoryExecResult.Output);
+            return 1;
+        }
+
+        var repo = repositoryExecResult.Object!;
+
+        repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
+        if (!repo.Results.Status.Success)
+        {
+            Console.WriteLine($"Failed to get repository status: {repo.Results.Status}");
+            return 1;
+        }
+        else if (repo.Results.Status.Output != string.Empty)
+        {
+            Console.WriteLine($"Repository has uncommitted changes, cannot update submodule commits.");
+            return 1;
+        }
+
+        var gitModulesFileExecResult = _git.GetGitModulesFile(repo.Path, context.CancellationToken);
+        if (!gitModulesFileExecResult.Success)
+        {
+            Console.WriteLine($"Did not read .gitmodules file: {gitModulesFileExecResult.Output}");
+            return 1;
+        }
+
+        var submodules = gitModulesFileExecResult.Object.Submodules;
+        if (!submodules.Any())
+        {
+            Console.WriteLine($"No submodules found in repository.");
+            return 0;
+        }
+
+        var groupedByIgnore = submodules.GroupBy(s => s.Ignore);
+        if (groupedByIgnore.Count() > 1)
+        {
+            Console.WriteLine($"Cannot update submodule commits when submodules have different ignore options. Use 'submodule-set-ignore' command to set all submodules to the same ignore option.");
+            return 1;
+        }
+
+        var currentIgnoreOption = groupedByIgnore.First().Key;
+
+        try
+        {
+            var setIgnoreOptionExecResult = _git.SetSubmoduleIgnoreOption(repo.Path, GitSubmoduleIgnoreOption.Dirty, context.CancellationToken);
+            if (!setIgnoreOptionExecResult.Success)
+            {
+                Console.WriteLine($"Failed to set submodule ignore option: {setIgnoreOptionExecResult.Output}");
+                return 1;
+            }
+
+            repo.Results.FullStatus = _git.GetStatus(repo.Path, porcelain: false, context.CancellationToken);
+            if (!repo.Results.FullStatus.Success)
+            {
+                Console.WriteLine($"Failed to get repository status: {repo.Results.FullStatus}");
+                return 1;
+            }
+
+            var submodulesWithNewCommits = _submoduleNewCommitsMatcher.Matches(repo.Results.FullStatus.Output)
+                .Cast<Match>()
+                .Select(m => m.Groups["path"].Value)
+                .Where(p => submodules.Any(s => s.Path == p))
+                .ToArray();
+
+            if (submodulesWithNewCommits.Length == 0)
+            {
+                Console.WriteLine("No new commits found in submodules.");
+                return 0;
+            }
+
+            var addExecResult = _git.Add(repo.Path, submodulesWithNewCommits, context.CancellationToken);
+            if (!addExecResult.Success)
+            {
+                Console.WriteLine($"Failed to add submodule commits: {addExecResult.Output}");
+                return 1;
+            }
+
+            Console.WriteLine($"Staged submodule commits for {submodulesWithNewCommits.Length} submodule{(submodulesWithNewCommits.Length > 1 ? "s" : "")}:{Environment.NewLine} • {string.Join($"{Environment.NewLine} • ", submodulesWithNewCommits)}");
+            Console.WriteLine("Perform a commit to finalize updating the submodule commits. Use \"git restore --staged .\" to unstage.");
+
+            return 0;
+        }
+        finally
+        {
+            var setIgnoreOptionExecResult = _git.SetSubmoduleIgnoreOption(repo.Path, currentIgnoreOption, context.CancellationToken);
+            if (!setIgnoreOptionExecResult.Success)
+            {
+                Console.WriteLine($"Failed to set reset submodule ignore option to '{currentIgnoreOption.ToString().ToLower()}': {setIgnoreOptionExecResult.Output}");
+            }
+
+            _ = _git.Restore(repo.Path, [".gitmodules"], context.CancellationToken);
+        }
     }
 }

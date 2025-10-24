@@ -7,8 +7,9 @@
     "cSpell.words": [
         "gitmodules",
         "gt",
-        "superproject",
-        "Kokoabim"
+        "Kokoabim",
+        "pathspecs",
+        "superproject"
     ],
     "cSpell.ignoreWords": [
         "namespaceanddescendants"

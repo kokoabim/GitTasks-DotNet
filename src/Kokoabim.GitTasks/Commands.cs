@@ -23,7 +23,8 @@ public class Commands
             PullCommand(),
             ResetCommand(),
             StatusCommand(),
-            SetSubmoduleIgnoreOptionCommand()
+            SetSubmoduleIgnoreOptionCommand(),
+            UpdateSubmoduleCommitsCommand()
         ];
     }
 
@@ -120,5 +121,15 @@ public class Commands
             Arguments.ShowGitOutputSwitch
         ],
         asyncFunction: _tasks.ShowStatusAsync
+    );
+
+    private ConsoleCommand UpdateSubmoduleCommitsCommand() => new(
+        name: "submodule-commits",
+        titleText: "Update submodule commits",
+        arguments: [
+            Arguments.PathArgument,
+            Arguments.ShowGitOutputSwitch
+        ],
+        asyncFunction: _tasks.UpdateSubmoduleCommitsAsync
     );
 }

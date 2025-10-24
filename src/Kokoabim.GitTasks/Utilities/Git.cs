@@ -9,6 +9,12 @@ public class Git
 
     #region methods
 
+    public ExecutorResult Add(string path, string[] pathspecs, CancellationToken cancellationToken)
+    {
+        var args = $"add {string.Join(' ', pathspecs.Select(sm => $"\"{sm}\""))}";
+        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+    }
+
     public ExecutorResult Checkout(string path, string branch, bool createBranch, CancellationToken cancellationToken = default)
     {
         var args = "checkout";
@@ -156,6 +162,19 @@ public class Git
         return [.. directories.Distinct().Order()];
     }
 
+    public ExecutorResult<GitModulesFile?> GetGitModulesFile(string path, CancellationToken cancellationToken = default)
+    {
+        var didParse = GitModulesFile.TryParse(path, ".gitmodules", out var gitModulesFile, out var errorMessage);
+        return didParse
+            ? ExecutorResult.CreateWithObject<GitModulesFile?>(gitModulesFile, path)
+            : new ExecutorResult<GitModulesFile?>
+            {
+                ExitCode = 1,
+                Output = errorMessage,
+                Reference = path,
+            };
+    }
+
     public ExecutorResult<GitRepository>[] GetRepositories(string path, CancellationToken cancellationToken = default)
     {
         var results = new List<ExecutorResult<GitRepository>>();
@@ -178,7 +197,12 @@ public class Git
     public ExecutorResult<GitRepository?> GetRepository(string path, CancellationToken cancellationToken = default) =>
         _fileSystem.IsGitDirectory(path)
             ? GetRepository(path, isSubmodule: false, cancellationToken).AsNullable()
-            : ExecutorResult.CreateWithNull<GitRepository>(path);
+            : new ExecutorResult<GitRepository?>
+            {
+                ExitCode = 1,
+                Output = "Not a git repository",
+                Reference = path,
+            };
 
     public ExecutorResult GetStatus(string path, bool porcelain = false, CancellationToken cancellationToken = default)
     {
@@ -249,6 +273,12 @@ public class Git
         };
 
         return (await _executor.ExecuteAsync("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
+    }
+
+    public ExecutorResult Restore(string path, string[] pathspecs, CancellationToken cancellationToken)
+    {
+        var args = $"restore {string.Join(' ', pathspecs.Select(sm => $"\"{sm}\""))}";
+        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
     public ExecutorResult SetHead(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
