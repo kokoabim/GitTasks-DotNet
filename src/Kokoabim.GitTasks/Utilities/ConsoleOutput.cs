@@ -5,19 +5,44 @@ namespace Kokoabim.GitTasks;
 public static class ConsoleOutput
 {
     private static readonly Regex _alreadyOnBranchRegex = new(@"^already on '(?<branch>[^']+)'", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly string _doubleLineDash = new('=', 60);
     private static readonly Lock _positionLock = new();
     private static readonly Regex _resetCommitRegex = new(@" is now at (?<commit>[0-9a-f]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly string _singleLineDash = new('—', 60);
     private static readonly Regex _switchedToBranchRegex = new(@"^switched to( a new)? branch '(?<branch>[^']+)'", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     #region methods
 
-    public static void ClearHeaderDynamicallyActivity(GitRepository repository)
+    public static void ClearHeaderDynamicallyActivity(GitRepository repository, bool resetPosition = false)
     {
         lock (_positionLock)
         {
             Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
             WriteNormal("    ");
+            if (resetPosition) Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
         }
+    }
+
+    public static void WriteBlue(string text, bool newline = false)
+    {
+        Console.ForegroundColor = ConsoleColor.Blue;
+        if (newline) Console.WriteLine(text);
+        else Console.Write(text);
+        Console.ResetColor();
+    }
+
+    public static void WriteBold(string text, bool newline = false)
+    {
+        if (newline) Console.WriteLine($"\x1b[1m{text}\x1b[0m");
+        else Console.Write($"\x1b[1m{text}\x1b[0m");
+    }
+
+    public static void WriteGreen(string text, bool newline = false)
+    {
+        Console.ForegroundColor = ConsoleColor.Green;
+        if (newline) Console.WriteLine(text);
+        else Console.Write(text);
+        Console.ResetColor();
     }
 
     public static void WriteHeaderCheckout(GitRepository repository, bool dynamically)
@@ -180,6 +205,8 @@ public static class ConsoleOutput
 
     public static void WriteHeaderDynamicallyStatus(GitRepository repository)
     {
+        ClearHeaderDynamicallyActivity(repository);
+
         if (repository.Results.Status is null) return;
 
         var output = repository.Results.Status.Output;
@@ -410,10 +437,111 @@ public static class ConsoleOutput
         return Console.CursorTop;
     }
 
+    public static void WriteItalic(string text) => Console.Write($"\x1b[3m{text}\x1b[0m");
+
     public static void WriteLight(string text, bool newline = false)
     {
         if (newline) Console.WriteLine($"\x1b[2m{text}\x1b[0m");
         else Console.Write($"\x1b[2m{text}\x1b[0m");
+    }
+
+    public static void WriteLogEntries(GitLogEntry[] logEntries, bool subjectOnly = false, bool doNotCompactMessages = false)
+    {
+        var lastIndex = logEntries.Length - 1;
+        for (int i = 0; i < logEntries.Length; i++)
+        {
+            var entry = logEntries[i];
+
+            WriteYellow(entry.Hash.Abbreviated);
+            WriteBold($" {entry.AuthorName}");
+            if (entry.AuthorName != entry.CommitterName) WriteLight($" ({entry.CommitterName})");
+            WriteLight(" @");
+            WriteNormal($" {entry.AuthorDate:M/d/yy h:mm tt}");
+            if (entry.AuthorDate != entry.CommitDate) WriteLight($" ({entry.CommitDate:M/d/yy h:mm tt})");
+            WriteLight(" •");
+            WriteNormal($" {entry.NumStatsTotals.FilesChanged} file{(entry.NumStatsTotals.FilesChanged == 1 ? "" : "s")}");
+            WriteGreen($" +{entry.NumStatsTotals.AddedLines}");
+            WriteRed($" -{entry.NumStatsTotals.DeletedLines}", newline: true);
+
+            WriteLight(new string?[]
+                {
+                    entry.Repository,
+                    entry.Branch,
+                    entry.Decorations,
+                    string.Join(", ", entry.ParentHashes.Select(h => h.Abbreviated)),
+                    entry.Approvers is not null && entry.Approvers.Length > 0 ? string.Join(", ", entry.Approvers) : null
+                }.CombineNonNullOrWhiteSpace(" • ")!,
+                newline: true);
+            Console.WriteLine();
+
+            WriteBold(entry.MessageSubject, newline: true);
+            if (!subjectOnly && !string.IsNullOrWhiteSpace(entry.MessageBody))
+            {
+                if (doNotCompactMessages) Console.WriteLine();
+                WriteNormal(entry.MessageBody, newline: true);
+            }
+            Console.WriteLine();
+
+            if (i < lastIndex)
+            {
+                WriteLight(_singleLineDash, newline: true);
+                Console.WriteLine();
+            }
+        }
+
+        WriteLight(_doubleLineDash, newline: true);
+        Console.WriteLine();
+
+        var groupedByAuthor = logEntries.GroupBy(e => e.AuthorName.Replace(" ", "")).OrderByDescending(g => g.Count()).ToArray();
+        var longestAuthorNameLength = groupedByAuthor.Max(g => g.First().AuthorName.Length);
+        var longestCommitCountLength = groupedByAuthor.Max(g => g.Count().ToString().Length);
+        var longestAddedLinesLength = groupedByAuthor.Max(g => g.Sum(e => e.NumStatsTotals.AddedLines).ToString().Length) + 3;
+        var longestDeletedLinesLength = groupedByAuthor.Max(g => g.Sum(e => e.NumStatsTotals.DeletedLines).ToString().Length) + 3;
+        var longestFilesChangedLength = groupedByAuthor.Max(g => g.Sum(e => e.NumStatsTotals.FilesChanged).ToString().Length);
+
+        var maxLineLength = 0;
+        for (int i = 0; i < groupedByAuthor.Length; i++)
+        {
+            var authorGroup = groupedByAuthor[i];
+
+            var authorName = authorGroup.First().AuthorName;
+            var commitCount = authorGroup.Count();
+            var addedLines = authorGroup.Sum(e => e.NumStatsTotals.AddedLines);
+            var deletedLines = authorGroup.Sum(e => e.NumStatsTotals.DeletedLines);
+            var filesChanged = authorGroup.Sum(e => e.NumStatsTotals.FilesChanged);
+
+            WriteBold(authorName.PadRight(longestAuthorNameLength));
+            WriteNormal($"  {commitCount.ToString().PadLeft(longestCommitCountLength)} commit{(commitCount == 1 ? "" : "s"),-1}");
+            WriteNormal($"  {filesChanged.ToString().PadLeft(longestFilesChangedLength)} file{(filesChanged == 1 ? "" : "s"),-1}");
+            WriteGreen($"  +{addedLines}".PadLeft(longestAddedLinesLength));
+            WriteRed($"  -{deletedLines}".PadLeft(longestDeletedLinesLength));
+
+            if (Console.CursorLeft > maxLineLength) maxLineLength = Console.CursorLeft;
+            Console.WriteLine();
+        }
+
+        if (logEntries.Length > 1)
+        {
+            WriteLight(new string('-', maxLineLength), newline: true);
+            var totalCommits = logEntries.Length;
+            var totalAddedLines = logEntries.Sum(e => e.NumStatsTotals.AddedLines);
+            var totalDeletedLines = logEntries.Sum(e => e.NumStatsTotals.DeletedLines);
+            var totalFilesChanged = logEntries.Sum(e => e.NumStatsTotals.FilesChanged);
+            WriteNormal(groupedByAuthor.Count().ToString().PadRight(longestAuthorNameLength));
+            WriteNormal(totalCommits.ToString().PadLeft(longestCommitCountLength + 2));
+            WriteNormal(totalFilesChanged.ToString().PadLeft(longestFilesChangedLength + 10));
+            WriteGreen($"+{totalAddedLines}".PadLeft(longestAddedLinesLength + 6));
+            WriteRed($"-{totalDeletedLines}".PadLeft(longestDeletedLinesLength));
+        }
+
+        Console.WriteLine();
+    }
+
+    public static void WriteNormal(string text, bool newline = false)
+    {
+        Console.ResetColor();
+        if (newline) Console.WriteLine($"\x1b[0m{text}");
+        else Console.Write($"\x1b[0m{text}");
     }
 
     public static void WriteRed(string text, bool newline = false)
@@ -424,37 +552,32 @@ public static class ConsoleOutput
         Console.ResetColor();
     }
 
-    private static void WriteBlue(string text)
+    public static void WriteRedAndLight(string redText, string lightText, bool newline = false)
     {
-        Console.ForegroundColor = ConsoleColor.Blue;
-        Console.Write(text);
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.Write(redText);
         Console.ResetColor();
+
+        WriteLight(lightText, newline);
     }
 
-    private static void WriteBold(string text) => Console.Write($"\x1b[1m{text}\x1b[0m");
+    public static void WriteUnderline(string text) => Console.Write($"\x1b[4m{text}\x1b[0m");
 
-    private static void WriteGreen(string text)
-    {
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.Write(text);
-        Console.ResetColor();
-    }
-
-    private static void WriteItalic(string text) => Console.Write($"\x1b[3m{text}\x1b[0m");
-
-    private static void WriteNormal(string text)
-    {
-        Console.ResetColor();
-        Console.Write($"\x1b[0m{text}");
-    }
-
-    private static void WriteUnderline(string text) => Console.Write($"\x1b[4m{text}\x1b[0m");
-
-    private static void WriteYellow(string text)
+    public static void WriteYellow(string text, bool newline = false)
     {
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.Write(text);
+        if (newline) Console.WriteLine(text);
+        else Console.Write(text);
         Console.ResetColor();
+    }
+
+    public static void WriteYellowAndLight(string yellowText, string lightText, bool newline = false)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.Write(yellowText);
+        Console.ResetColor();
+
+        WriteLight(lightText, newline);
     }
 
     #endregion 

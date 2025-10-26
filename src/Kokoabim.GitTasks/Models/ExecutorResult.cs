@@ -34,6 +34,7 @@ public class ExecutorResult
         ExitCode = ExitCode,
         Killed = Killed,
         Output = Output,
+        Object = default,
         Reference = reference ?? Reference
     };
 

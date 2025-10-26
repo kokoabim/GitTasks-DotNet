@@ -28,10 +28,12 @@ public class GitRepositoryResults
     public ExecutorResult<GitBranch[]>? Branches { get; set; }
     public ExecutorResult? Checkout { get; set; }
     public ExecutorResult? Clean { get; set; }
+    public ExecutorResult? Commit { get; set; }
     public ExecutorResult<GitCommitPosition>? CommitPosition { get; set; }
     public ExecutorResult? Fetch { get; set; }
     public ExecutorResult? FullStatus { get; set; }
     public ExecutorResult? Pull { get; set; }
+    public ExecutorResult? Push { get; set; }
     public ExecutorResult? Reset { get; set; }
     public ExecutorResult? SetHead { get; set; }
     public ExecutorResult? Status { get; set; }

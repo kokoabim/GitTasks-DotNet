@@ -13,12 +13,15 @@ public class Commands
         _tasks = tasks;
     }
 
+    #region methods
+
     public ConsoleCommand[] Generate()
     {
         return [
             CheckoutCommand(),
             CleanCommand(),
             FixRefCommand(),
+            LogCommand(),
             MainCommand(),
             PullCommand(),
             ResetCommand(),
@@ -63,6 +66,27 @@ public class Commands
             Arguments.ShowGitOutputSwitch
         ],
         asyncFunction: _tasks.FixReferenceAsync
+    );
+
+    private ConsoleCommand LogCommand() => new(
+        name: "log",
+        titleText: "Show git log",
+        arguments: [
+            Arguments.PathArgument,
+            Arguments.LogAfterOption,
+            Arguments.LogAuthorOption,
+            Arguments.LogBeforeOption,
+            Arguments.LogBranchPatternOption,
+            Arguments.LogDoNotCompactMessageSwitch,
+            Arguments.LogDoNotFetchSwitch,
+            Arguments.LogFilePatternOption,
+            Arguments.LogIncludeMergesSwitch,
+            Arguments.LogMergesOnlySwitch,
+            Arguments.LogMessagePatternOption,
+            Arguments.LogRemoteNameOption,
+            Arguments.LogSubjectOnlySwitch
+        ],
+        asyncFunction: _tasks.ShowLogAsync
     );
 
     private ConsoleCommand MainCommand() => new(
@@ -128,8 +152,13 @@ public class Commands
         titleText: "Update submodule commits",
         arguments: [
             Arguments.PathArgument,
+            Arguments.CreateBranchOption,
+            Arguments.CommitMessageOption,
+            Arguments.PushSwitch,
             Arguments.ShowGitOutputSwitch
         ],
         asyncFunction: _tasks.UpdateSubmoduleCommitsAsync
     );
+
+    #endregion 
 }
