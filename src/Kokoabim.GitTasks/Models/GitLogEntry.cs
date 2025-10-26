@@ -5,13 +5,14 @@ namespace Kokoabim.GitTasks;
 public class GitLogEntry
 {
     private static readonly Regex _approvedByMatcher = new(@"^Approved-by: (?<ApprovedBy>.+)$", RegexOptions.Multiline);
-    private static readonly Regex _entriesMatcher = new(@"AuthorDate=(?<AuthorDate>[^\n]*)\nAuthorName=(?<AuthorName>[^\n]*)\nCommitDate=(?<CommitDate>[^\n]*)\nCommitterName=(?<CommitterName>[^\n]*)\nDecorations=(?<Decorations>.*?)\nHash=(?<Hash>[0-9a-f]+)\nMessageBody=(?<MessageBody>.*?)\nMessageSubject=(?<MessageSubject>[^\n]*)\nParentHashes=(?<ParentHashes>[^\n]*)\nNumStats=\n(?<NumStats>(?:\d+\t\d+\t[^\n]+\n?)*)", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase);
+    private static readonly Regex _entriesMatcher = new(@"AuthorDate=(?<AuthorDate>[^\n]*)\nAuthorName=(?<AuthorName>[^\n]*)\nAuthorEmail=(?<AuthorEmail>[^\n]*)\nCommitDate=(?<CommitDate>[^\n]*)\nCommitterName=(?<CommitterName>[^\n]*)\nDecorations=(?<Decorations>.*?)\nHash=(?<Hash>[0-9a-f]+)\nMessageBody=(?<MessageBody>.*?)\nMessageSubject=(?<MessageSubject>[^\n]*)\nParentHashes=(?<ParentHashes>[^\n]*)\nNumStats=\n(?<NumStats>(?:\d+\t\d+\t[^\n]+\n?)*)", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase);
     private static readonly Regex _threeOrMoreNewLinesMatcher = new(@"\n{3,}");
     private static readonly Regex _twoOrMoreNewLinesMatcher = new(@"\n{2,}");
 
     public string[]? Approvers { get; set; }
     public DateTime AuthorDate { get; set; } // %ad
     public string AuthorName { get; set; } = null!; // %an
+    public string AuthorEmail { get; set; } = null!; // %ae
     public string Branch { get; set; } = null!;
     public DateTime CommitDate { get; set; } // %cd
     public string CommitterName { get; set; } = null!; // %cn
@@ -37,6 +38,7 @@ public class GitLogEntry
             {
                 AuthorDate = DateTime.Parse(match.Groups["AuthorDate"].Value),
                 AuthorName = match.Groups["AuthorName"].Value,
+                AuthorEmail = match.Groups["AuthorEmail"].Value,
                 CommitDate = DateTime.Parse(match.Groups["CommitDate"].Value),
                 CommitterName = match.Groups["CommitterName"].Value,
                 Decorations = match.Groups["Decorations"].Value.Trim(' ', '(', ')'),

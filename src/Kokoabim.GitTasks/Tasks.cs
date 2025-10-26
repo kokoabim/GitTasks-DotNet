@@ -502,7 +502,7 @@ public class Tasks
         return 0;
     }
 
-    public async Task<int> SetSubmoduleIgnoreOptionAsync(ConsoleContext context)
+    public int SetSubmoduleIgnoreOption(ConsoleContext context)
     {
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResult = _git.GetRepository(path, context.CancellationToken);
@@ -775,10 +775,8 @@ public class Tasks
         return 0;
     }
 
-    public async Task<int> UpdateSubmoduleCommitsAsync(ConsoleContext context)
+    public int UpdateSubmoduleCommits(ConsoleContext context)
     {
-        // ! TODO: TEST THIS!
-
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(Arguments.PathArgument.Name) ?? ".");
         var repositoryExecResult = _git.GetRepository(path, context.CancellationToken);
         if (!repositoryExecResult.Success || repositoryExecResult.Object?.Success is false)

@@ -492,7 +492,7 @@ public static class ConsoleOutput
         WriteLight(_doubleLineDash, newline: true);
         Console.WriteLine();
 
-        var groupedByAuthor = logEntries.GroupBy(e => e.AuthorName.Replace(" ", "")).OrderByDescending(g => g.Count()).ToArray();
+        var groupedByAuthor = logEntries.GroupBy(e => e.AuthorEmail.ToLower()).OrderByDescending(g => g.Count()).ToArray();
         var longestAuthorNameLength = groupedByAuthor.Max(g => g.First().AuthorName.Length);
         var longestCommitCountLength = groupedByAuthor.Max(g => g.Count().ToString().Length);
         var longestAddedLinesLength = groupedByAuthor.Max(g => g.Sum(e => e.NumStatsTotals.AddedLines).ToString().Length) + 3;

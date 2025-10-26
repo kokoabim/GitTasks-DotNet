@@ -132,7 +132,7 @@ public class Commands
             Arguments.PathArgument,
             Arguments.ShowGitOutputSwitch
         ],
-        asyncFunction: _tasks.SetSubmoduleIgnoreOptionAsync
+        syncFunction: _tasks.SetSubmoduleIgnoreOption
     );
 
     private ConsoleCommand StatusCommand() => new(
@@ -157,7 +157,7 @@ public class Commands
             Arguments.PushSwitch,
             Arguments.ShowGitOutputSwitch
         ],
-        asyncFunction: _tasks.UpdateSubmoduleCommitsAsync
+        syncFunction: _tasks.UpdateSubmoduleCommits
     );
 
     #endregion 

@@ -4,7 +4,7 @@ namespace Kokoabim.GitTasks;
 
 public class Git
 {
-    private const string _gitLogFormat = "AuthorDate=%ad%nAuthorName=%an%nCommitDate=%cd%nCommitterName=%cn%nDecorations=%d%nHash=%H%nMessageBody=%B%nMessageSubject=%s%nParentHashes=%P%nNumStats=";
+    private const string _gitLogFormat = "AuthorDate=%ad%nAuthorName=%an%nAuthorEmail=%ae%nCommitDate=%cd%nCommitterName=%cn%nDecorations=%d%nHash=%H%nMessageBody=%B%nMessageSubject=%s%nParentHashes=%P%nNumStats=";
 
     public bool IsInstalled => GetVersion() is not null;
 
