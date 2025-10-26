@@ -1,13 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Kokoabim.GitTasks;
 
 public class GitModulesFile
 {
-    public string Path { get; init; }
-    public IEnumerable<GitModulesFileEntry> Submodules { get; init; }
+    public string Path { get; set; }
+    public IEnumerable<GitModulesFileEntry> Submodules { get; set; } = [];
 
     private static readonly FileSystem _fileSystem = new();
     private static readonly Regex _ignoreMatch = new Regex(@"^\s*ignore\s*=\s*(?<ignore>.+)\s*$", RegexOptions.Multiline);
@@ -90,31 +89,5 @@ public class GitModulesFile
             errorMessage = $"Failed to write .gitmodules file '{Path}': {ex.Message}";
             return false;
         }
-    }
-}
-
-public class GitModulesFileEntry
-{
-    public GitSubmoduleIgnoreOption Ignore { get; set; }
-    public string Name { get; set; }
-    public string Path { get; set; }
-    public string Url { get; set; }
-
-    public GitModulesFileEntry(string name, string path, string url, GitSubmoduleIgnoreOption ignore)
-    {
-        Name = name;
-        Path = path;
-        Url = url;
-        Ignore = ignore;
-    }
-
-    public override string ToString()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"[submodule \"{Name}\"]");
-        sb.AppendLine($"\tpath = {Path}");
-        sb.AppendLine($"\turl = {Url}");
-        if (Ignore != GitSubmoduleIgnoreOption.None) sb.AppendLine($"\tignore = {Ignore.ToString().ToLower()}");
-        return sb.ToString().TrimEnd();
     }
 }

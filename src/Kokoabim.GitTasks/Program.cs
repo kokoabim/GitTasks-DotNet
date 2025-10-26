@@ -1,9 +1,9 @@
 using Kokoabim.CommandLineInterface;
 using Kokoabim.GitTasks;
 
-var consoleApp = new ConsoleApp(titleText: "Git Tasks", commands: new Commands().Generate())
+var consoleApp = new ConsoleApp(titleText: "Git Tasks", commands: GitTasksCommands.Create())
 {
-    DefaultCommandName = Tasks.DefaultCommandName
+    DefaultCommandName = GitTasksCommandOperations.DefaultCommandName
 };
 
 return await consoleApp.RunAsync(args);

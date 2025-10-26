@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace Kokoabim.GitTasks;
 
+#pragma warning disable CA1822 // Mark members as static
+
 public class Git
 {
     private const string _gitLogFormat = "AuthorDate=%ad%nAuthorName=%an%nAuthorEmail=%ae%nCommitDate=%cd%nCommitterName=%cn%nDecorations=%d%nHash=%H%nMessageBody=%B%nMessageSubject=%s%nParentHashes=%P%nNumStats=";
@@ -13,106 +15,76 @@ public class Git
 
     #region methods
 
-    public ExecutorResult Add(string path, string[] pathspecs, CancellationToken cancellationToken = default)
+    public ExecuteResult Add(string path, string[] pathspecs, CancellationToken cancellationToken = default)
     {
         var args = $"add {string.Join(' ', pathspecs.Select(sm => $"\"{sm}\""))}";
         return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
-    public ExecutorResult Checkout(string path, string branch, bool createBranch, CancellationToken cancellationToken = default)
+    public ExecuteResult Checkout(string path, string branch, bool createBranch, CancellationToken cancellationToken = default) =>
+        _executor.Execute("git", CreateCheckoutArgs(branch, createBranch), workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+
+    public async Task<ExecuteResult> CheckoutAsync(string path, string branch, bool createBranch, CancellationToken cancellationToken = default) =>
+        (await _executor.ExecuteAsync("git", CreateCheckoutArgs(branch, createBranch), workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
+
+    public ExecuteResult Clean(string path, bool recursively, bool force, bool ignoreIgnoreRules, bool cleanOnlyIgnored, bool dryRun, CancellationToken cancellationToken = default)
     {
-        var args = "checkout";
-        if (createBranch) args += " -b";
-        args += $" {branch}";
+        (bool success, string? output) = CreateCleanArgs(recursively, force, ignoreIgnoreRules, cleanOnlyIgnored, dryRun, out string? args);
+        if (!success) return new ExecuteResult
+        {
+            ExitCode = 1,
+            Output = output,
+            Reference = path,
+        };
 
         return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
-    public async Task<ExecutorResult> CheckoutAsync(string path, string branch, bool createBranch, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult> CleanAsync(string path, bool recursively, bool force, bool ignoreIgnoreRules, bool cleanOnlyIgnored, bool dryRun, CancellationToken cancellationToken = default)
     {
-        var args = "checkout";
-        if (createBranch) args += " -b";
-        args += $" {branch}";
+        (bool success, string? output) = CreateCleanArgs(recursively, force, ignoreIgnoreRules, cleanOnlyIgnored, dryRun, out string? args);
+        if (!success) return new ExecuteResult
+        {
+            ExitCode = 1,
+            Output = output,
+            Reference = path,
+        };
 
         return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
     }
 
-    public ExecutorResult Clean(string path, bool recursively, bool force, bool ignoreIgnoreRules, bool cleanOnlyIgnored, bool dryRun, CancellationToken cancellationToken = default)
-    {
-        if (cleanOnlyIgnored && ignoreIgnoreRules)
-        {
-            return new ExecutorResult
-            {
-                ExitCode = 1,
-                Output = "Cannot use both 'only-ignored' and 'ignore-rules' switches together.",
-                Reference = path,
-            };
-        }
-
-        var args = "clean";
-        if (recursively) args += " -d";
-        if (force) args += " -f";
-        if (ignoreIgnoreRules) args += " -x";
-        if (cleanOnlyIgnored) args += " -X";
-        if (dryRun) args += " -n";
-
-        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
-    }
-
-    public async Task<ExecutorResult> CleanAsync(string path, bool recursively, bool force, bool ignoreIgnoreRules, bool cleanOnlyIgnored, bool dryRun, CancellationToken cancellationToken = default)
-    {
-        if (cleanOnlyIgnored && ignoreIgnoreRules)
-        {
-            return new ExecutorResult
-            {
-                ExitCode = 1,
-                Output = "Cannot use both 'only-ignored' and 'ignore-rules' switches together.",
-                Reference = path,
-            };
-        }
-
-        var args = "clean";
-        if (recursively) args += " -d";
-        if (force) args += " -f";
-        if (ignoreIgnoreRules) args += " -x";
-        if (cleanOnlyIgnored) args += " -X";
-        if (dryRun) args += " -n";
-
-        return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
-    }
-
-    public ExecutorResult Commit(string path, string message, CancellationToken cancellationToken = default)
+    public ExecuteResult Commit(string path, string message, CancellationToken cancellationToken = default)
     {
         var args = $"commit -m \"{message.Replace("\"", "\\\"")}\"";
         return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
-    public async Task<ExecutorResult> FetchAsync(string path, string? branch = null, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult> FetchAsync(string path, string? branch = null, CancellationToken cancellationToken = default)
     {
         var args = branch is null ? "fetch" : $"fetch origin {branch}";
         return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
     }
 
-    public ExecutorResult<GitBranch[]> GetBranches(string path, CancellationToken cancellationToken = default)
+    public ExecuteResult<GitBranch[]> GetBranches(string path, CancellationToken cancellationToken = default)
     {
         var result = _executor.Execute("git", "branch --all", workingDirectory: path, cancellationToken: cancellationToken);
         result.Reference = path;
         if (!result.Success) return result.WithNull<GitBranch[]>();
 
         var branches = result.Output.Trim().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(GitBranch.Parse).ToArray();
-        return result.WithObject(branches);
+        return result.WithValue(branches);
     }
 
-    public async Task<ExecutorResult<GitBranch[]>> GetBranchesAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult<GitBranch[]>> GetBranchesAsync(string path, CancellationToken cancellationToken = default)
     {
         var result = (await _executor.ExecuteAsync("git", "branch --all", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
         if (!result.Success) return result.WithNull<GitBranch[]>();
 
         var branches = result.Output.Trim().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(GitBranch.Parse).ToArray();
-        return result.WithObject(branches);
+        return result.WithValue(branches);
     }
 
-    public ExecutorResult<GitCommitPosition> GetCommitPosition(string path, string? branch = null, CancellationToken cancellationToken = default)
+    public ExecuteResult<GitCommitPosition> GetCommitPosition(string path, string? branch = null, CancellationToken cancellationToken = default)
     {
         var execResult = _executor.Execute("git", $"rev-list --left-right --count \"origin/{branch}...{branch}\"", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
         if (!execResult.Success) return execResult.WithNull<GitCommitPosition>();
@@ -120,7 +92,7 @@ public class Git
         var parts = execResult.Output.Trim().Split(['\t', ' '], 2, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 2 && int.TryParse(parts[0], out var behindBy) && int.TryParse(parts[1], out var aheadBy))
         {
-            return execResult.WithObject(new GitCommitPosition
+            return execResult.WithValue(new GitCommitPosition
             {
                 BehindBy = behindBy,
                 AheadBy = aheadBy
@@ -130,28 +102,28 @@ public class Git
         return execResult.WithNull<GitCommitPosition>();
     }
 
-    public ExecutorResult<string> GetCurrentBranch(string path, CancellationToken cancellationToken = default)
+    public ExecuteResult<string> GetCurrentBranch(string path, CancellationToken cancellationToken = default)
     {
         var result = _executor.Execute("git", "rev-parse --abbrev-ref HEAD", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithObject(result.Output?.Trim(), path);
+        return result.WithValue(result.Output?.Trim(), path);
     }
 
-    public async Task<ExecutorResult<string>> GetCurrentBranchAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult<string>> GetCurrentBranchAsync(string path, CancellationToken cancellationToken = default)
     {
         var result = await _executor.ExecuteAsync("git", "rev-parse --abbrev-ref HEAD", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.WithObject(result.Output?.Trim(), path);
+        return result.WithValue(result.Output?.Trim(), path);
     }
 
-    public ExecutorResult<string> GetDefaultBranch(string path, CancellationToken cancellationToken = default)
+    public ExecuteResult<string> GetDefaultBranch(string path, CancellationToken cancellationToken = default)
     {
         var result = _executor.Execute("git", "symbolic-ref refs/remotes/origin/HEAD --short", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.Success ? result.WithObject(result.Output?.Trim().Split('/', 2)[1], path) : result.WithNull<string>(path);
+        return result.Success ? result.WithValue(result.Output?.Trim().Split('/', 2)[1], path) : result.WithNull<string>(path);
     }
 
-    public async Task<ExecutorResult<string>> GetDefaultBranchAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult<string>> GetDefaultBranchAsync(string path, CancellationToken cancellationToken = default)
     {
         var result = await _executor.ExecuteAsync("git", "symbolic-ref refs/remotes/origin/HEAD --short", workingDirectory: path, cancellationToken: cancellationToken);
-        return result.Success ? result.WithObject(result.Output?.Trim().Split('/', 2)[1], path) : result.WithNull<string>(path);
+        return result.Success ? result.WithValue(result.Output?.Trim().Split('/', 2)[1], path) : result.WithNull<string>(path);
     }
 
     public string[] GetDirectories(string path, CancellationToken cancellationToken = default)
@@ -172,24 +144,16 @@ public class Git
         return [.. directories.Distinct().Order()];
     }
 
-    public ExecutorResult<GitModulesFile?> GetGitModulesFile(string path, CancellationToken cancellationToken = default)
-    {
-        var didParse = GitModulesFile.TryParse(path, ".gitmodules", out var gitModulesFile, out var errorMessage);
-        return didParse
-            ? ExecutorResult.CreateWithObject<GitModulesFile?>(gitModulesFile, path)
-            : new ExecutorResult<GitModulesFile?>
-            {
-                ExitCode = 1,
-                Output = errorMessage,
-                Reference = path,
-            };
-    }
+    public ExecuteResult<GitModulesFile?> GetGitModulesFile(string path) =>
+        GitModulesFile.TryParse(path, ".gitmodules", out var gitModulesFile, out var errorMessage)
+            ? ExecuteResult.CreateWithObject<GitModulesFile?>(gitModulesFile, path)
+            : new ExecuteResult<GitModulesFile?> { ExitCode = 1, Output = errorMessage, Reference = path };
 
-    public async Task<ExecutorResult<GitLogEntry[]>> GetLogAsync(string path, string branch, string remoteName = "origin", string? after = null, string? before = null, string? author = null, string? messagePattern = null, string? logFilePattern = null, bool doNotIncludeAll = false, bool includeMerges = false, bool mergesOnly = false, bool doNotCompactMessages = false, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult<GitLogEntry[]>> GetLogAsync(string path, string branch, string remoteName = "origin", string? after = null, string? before = null, string? author = null, string? messagePattern = null, string? logFilePattern = null, bool doNotIncludeAll = false, bool includeMerges = false, bool mergesOnly = false, bool doNotCompactMessages = false, CancellationToken cancellationToken = default)
     {
         var repoUrlExecResult = RepositoryName(path, remoteName, cancellationToken);
-        if (!repoUrlExecResult.Success) return repoUrlExecResult.WithObject<GitLogEntry[]>([], path);
-        var repoName = repoUrlExecResult.Object;
+        if (!repoUrlExecResult.Success) return repoUrlExecResult.WithValue<GitLogEntry[]>([], path);
+        var repoName = repoUrlExecResult.Value;
 
         var args = $"--no-pager log --numstat --date=iso --pretty=format:\"{_gitLogFormat}\"";
         if (after is not null) args += $" --after=\"{after}\"";
@@ -205,11 +169,11 @@ public class Git
         }
 
         var entries = GitLogEntry.ParseMany(gitLogExecResult.Output).ToList();
-        if (entries.Count == 0) return new ExecutorResult<GitLogEntry[]>
+        if (entries.Count == 0) return new ExecuteResult<GitLogEntry[]>
         {
             ExitCode = 0,
             Output = "No log entries found.",
-            Object = [],
+            Value = [],
             Reference = path,
         };
 
@@ -220,11 +184,11 @@ public class Git
 
             if (entries.Count == 0)
             {
-                return new ExecutorResult<GitLogEntry[]>
+                return new ExecuteResult<GitLogEntry[]>
                 {
                     ExitCode = 0,
                     Output = "No log entries found matching the specified message pattern.",
-                    Object = [],
+                    Value = [],
                     Reference = path,
                 };
             }
@@ -237,11 +201,11 @@ public class Git
 
             if (entries.Count == 0)
             {
-                return new ExecutorResult<GitLogEntry[]>
+                return new ExecuteResult<GitLogEntry[]>
                 {
                     ExitCode = 0,
                     Output = "No log entries found matching the specified file pattern.",
-                    Object = [],
+                    Value = [],
                     Reference = path,
                 };
             }
@@ -253,49 +217,38 @@ public class Git
             .OrderByDescending(le => le.AuthorDate)
             .ToArray();
 
-        return ExecutorResult.CreateWithObject(distinctOrderedLogEntries, path);
+        return ExecuteResult.CreateWithObject(distinctOrderedLogEntries, path);
     }
 
-    public ExecutorResult<GitRepository>[] GetRepositories(string path, CancellationToken cancellationToken = default)
+    public ExecuteResult<GitRepository>[] GetRepositories(string path, CancellationToken cancellationToken = default)
     {
-        var results = new List<ExecutorResult<GitRepository>>();
+        var results = new List<ExecuteResult<GitRepository>>();
         results.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepository(d, isSubmodule: false, cancellationToken)));
         results.AddRange(GetSubmoduleDirectories(path, cancellationToken).Select(d => GetRepository(d, isSubmodule: true, cancellationToken)));
 
-        return [.. results.OrderBy(r => r.Object!.Path).ForEach(r => r.Object!.SetRelativePath(path))];
+        return [.. results.OrderBy(r => r.Value!.Path).ForEach(r => r.Value!.SetRelativePath(path))];
     }
 
-    public async Task<ExecutorResult<GitRepository>[]> GetRepositoriesAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult<GitRepository>[]> GetRepositoriesAsync(string path, CancellationToken cancellationToken = default)
     {
-        var tasks = new List<Task<ExecutorResult<GitRepository>>>();
+        var tasks = new List<Task<ExecuteResult<GitRepository>>>();
         tasks.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepositoryAsync(d, isSubmodule: false, cancellationToken)));
         tasks.AddRange((await GetSubmoduleDirectoriesAsync(path, cancellationToken)).Select(d => GetRepositoryAsync(d, isSubmodule: true, cancellationToken)));
         var results = await Task.WhenAll(tasks);
 
-        return [.. results.OrderBy(r => r.Object!.Path).ForEach(r => r.Object!.SetRelativePath(path))];
+        return [.. results.OrderBy(r => r.Value!.Path).ForEach(r => r.Value!.SetRelativePath(path))];
     }
 
-    public ExecutorResult<GitRepository?> GetRepository(string path, CancellationToken cancellationToken = default) =>
+    public ExecuteResult<GitRepository?> GetRepository(string path, CancellationToken cancellationToken = default) =>
         _fileSystem.IsGitDirectory(path)
             ? GetRepository(path, isSubmodule: false, cancellationToken).AsNullable()
-            : new ExecutorResult<GitRepository?>
-            {
-                ExitCode = 1,
-                Output = "Not a git repository",
-                Reference = path,
-            };
+            : new ExecuteResult<GitRepository?> { ExitCode = 1, Output = "Not a git repository", Reference = path };
 
-    public ExecutorResult GetStatus(string path, bool porcelain = false, CancellationToken cancellationToken = default)
-    {
-        var args = porcelain ? "status --porcelain" : "status";
-        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
-    }
+    public ExecuteResult GetStatus(string path, bool porcelain = false, CancellationToken cancellationToken = default) =>
+        _executor.Execute("git", CreateStatusArgs(porcelain), workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
 
-    public async Task<ExecutorResult> GetStatusAsync(string path, bool porcelain = false, CancellationToken cancellationToken = default)
-    {
-        var args = porcelain ? "status --porcelain" : "status";
-        return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
-    }
+    public async Task<ExecuteResult> GetStatusAsync(string path, bool porcelain = false, CancellationToken cancellationToken = default) =>
+        (await _executor.ExecuteAsync("git", CreateStatusArgs(porcelain), workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
 
     public string[] GetSubmoduleDirectories(string path, CancellationToken cancellationToken = default)
     {
@@ -325,21 +278,105 @@ public class Git
         return result.Success ? result.Output.Trim() : null;
     }
 
-    public async Task<ExecutorResult> PullAsync(string path, CancellationToken cancellationToken = default) =>
+    public async Task<ExecuteResult> PullAsync(string path, CancellationToken cancellationToken = default) =>
         (await _executor.ExecuteAsync("git", "pull", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
 
-    public ExecutorResult Push(string path, CancellationToken cancellationToken = default) =>
+    public ExecuteResult Push(string path, CancellationToken cancellationToken = default) =>
         _executor.Execute("git", "push", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
 
-    public ExecutorResult<string> RepositoryName(string path, string remote = "origin", CancellationToken cancellationToken = default)
+    public ExecuteResult<string> RepositoryName(string path, string remote = "origin", CancellationToken cancellationToken = default)
     {
         var execResult = _executor.Execute("git", $"config --get remote.{remote}.url", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
         return execResult.Success
-            ? execResult.WithObject(Path.GetFileNameWithoutExtension(execResult.Output.Trim().Split('/', StringSplitOptions.RemoveEmptyEntries).Last()))
+            ? execResult.WithValue(Path.GetFileNameWithoutExtension(execResult.Output.Trim().Split('/', StringSplitOptions.RemoveEmptyEntries).Last()))
             : execResult.WithNull<string>();
     }
 
-    public ExecutorResult Reset(string path, string commit = "HEAD", GitResetMode resetType = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default)
+    public ExecuteResult Reset(string path, string commit = "HEAD", GitResetMode resetType = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default) =>
+        _executor.Execute("git", CreateResetArgs(commit, resetType, back), workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+
+    public async Task<ExecuteResult> ResetAsync(string path, string commit = "HEAD", GitResetMode mode = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default) =>
+        (await _executor.ExecuteAsync("git", CreateResetArgs(commit, mode, back), workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
+
+    public ExecuteResult Restore(string path, string[] pathspecs, CancellationToken cancellationToken = default) =>
+        _executor.Execute("git", $"restore {string.Join(' ', pathspecs.Select(sm => $"\"{sm}\""))}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+
+    public ExecuteResult SetHead(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
+    {
+        (bool success, string? output) = CreateSetHeadArgs(out string? args, remote, branch, automatically);
+        if (!success) return new ExecuteResult { ExitCode = 1, Output = output, Reference = path };
+
+        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+    }
+
+    public async Task<ExecuteResult> SetHeadAsync(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
+    {
+        (bool success, string? output) = CreateSetHeadArgs(out string? args, remote, branch, automatically);
+        if (!success) return new ExecuteResult { ExitCode = 1, Output = output, Reference = path };
+
+        return (await _executor.ExecuteAsync("git", args, workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
+    }
+
+    public ExecuteResult SetSubmoduleIgnoreOption(string path, GitSubmoduleIgnoreOption ignoreOption, CancellationToken cancellationToken = default)
+    {
+        if (!_fileSystem.FileExists(path, ".gitmodules")) return new ExecuteResult
+        {
+            ExitCode = 1,
+            Output = "No .gitmodules file found",
+            Reference = path,
+        };
+
+        var didParse = GitModulesFile.TryParse(path, ".gitmodules", out var gitModulesFile, out var errorMessage);
+        if (!didParse) return new ExecuteResult
+        {
+            ExitCode = 1,
+            Output = errorMessage,
+            Reference = path,
+        };
+
+        gitModulesFile!.Submodules.ForEach(sm => sm.Ignore = ignoreOption);
+
+        var didWrite = gitModulesFile.TryWrite(overwrite: true, out errorMessage);
+        if (!didWrite) return new ExecuteResult
+        {
+            ExitCode = 1,
+            Output = errorMessage,
+            Reference = path,
+        };
+
+        return new ExecuteResult
+        {
+            ExitCode = 0,
+            Output = "Updated .gitmodules file",
+            Reference = path,
+        };
+    }
+
+    private static string CreateCheckoutArgs(string branch, bool createBranch)
+    {
+        var args = "checkout";
+        if (createBranch) args += " -b";
+        args += $" {branch}";
+        return args;
+    }
+
+    private static (bool success, string? output) CreateCleanArgs(bool recursively, bool force, bool ignoreIgnoreRules, bool cleanOnlyIgnored, bool dryRun, out string? args)
+    {
+        args = null;
+
+        if (cleanOnlyIgnored && ignoreIgnoreRules) return (success: false, output: "Cannot use both 'only-ignored' and 'ignore-rules' switches together.");
+
+        args = "clean";
+        if (recursively) args += " -d";
+        if (force) args += " -f";
+        if (ignoreIgnoreRules) args += " -x";
+        if (cleanOnlyIgnored) args += " -X";
+        if (dryRun) args += " -n";
+
+        return (success: true, output: null);
+    }
+
+    private static string CreateResetArgs(string commit, GitResetMode resetType, int back)
     {
         if (back > 0) commit = $"{commit}~{back}";
 
@@ -350,124 +387,49 @@ public class Git
             _ => "--mixed"
         };
 
-        return _executor.Execute("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+        return $"reset {resetArg} {commit}";
     }
 
-    public async Task<ExecutorResult> ResetAsync(string path, string commit = "HEAD", GitResetMode mode = GitResetMode.Mixed, int back = 0, CancellationToken cancellationToken = default)
+    private static (bool success, string? output) CreateSetHeadArgs(out string? args, string remote = "origin", string? branch = null, bool automatically = false)
     {
-        if (back > 0) commit = $"{commit}~{back}";
+        args = null;
 
-        var resetArg = mode switch
-        {
-            GitResetMode.Soft => "--soft",
-            GitResetMode.Hard => "--hard",
-            _ => "--mixed"
-        };
+        if (branch is null && !automatically) return (success: false, output: "Branch must be specified if not setting automatically");
 
-        return (await _executor.ExecuteAsync("git", $"reset {resetArg} {commit}", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
+        branch ??= "--auto"; // 'automatically' is true if branch is null
+
+        args = $"remote set-head {remote} {branch}";
+
+        return (success: true, output: null);
     }
 
-    public ExecutorResult Restore(string path, string[] pathspecs, CancellationToken cancellationToken = default)
-    {
-        var args = $"restore {string.Join(' ', pathspecs.Select(sm => $"\"{sm}\""))}";
-        return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
-    }
+    private static string CreateStatusArgs(bool porcelain) => porcelain ? "status --porcelain" : "status";
 
-    public ExecutorResult SetHead(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
-    {
-        if (branch is null && !automatically) return new ExecutorResult
-        {
-            ExitCode = 1,
-            Output = "Branch must be specified if not setting automatically",
-            Reference = path,
-        };
-
-        var arg = branch is not null ? branch : "--auto"; // 'automatically' is true if branch is null
-        return _executor.Execute("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
-    }
-
-    public async Task<ExecutorResult> SetHeadAsync(string path, string remote, string? branch = null, bool automatically = false, CancellationToken cancellationToken = default)
-    {
-        if (branch is null && !automatically) return new ExecutorResult
-        {
-            ExitCode = 1,
-            Output = "Branch must be specified if not setting automatically",
-            Reference = path,
-        };
-
-        var arg = branch is not null ? branch : "--auto"; // 'automatically' is true if branch is null
-        return (await _executor.ExecuteAsync("git", $"remote set-head {remote} {arg}", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);
-    }
-
-    public ExecutorResult SetSubmoduleIgnoreOption(string path, GitSubmoduleIgnoreOption ignoreOption, CancellationToken cancellationToken = default)
-    {
-        if (!_fileSystem.FileExists(path, ".gitmodules"))
-        {
-            return new ExecutorResult
-            {
-                ExitCode = 1,
-                Output = "No .gitmodules file found",
-                Reference = path,
-            };
-        }
-
-        var didParse = GitModulesFile.TryParse(path, ".gitmodules", out var gitModulesFile, out var errorMessage);
-        if (!didParse)
-        {
-            return new ExecutorResult
-            {
-                ExitCode = 1,
-                Output = errorMessage,
-                Reference = path,
-            };
-        }
-
-        gitModulesFile!.Submodules.ForEach(sm => sm.Ignore = ignoreOption);
-
-        var didWrite = gitModulesFile.TryWrite(overwrite: true, out errorMessage);
-        if (!didWrite)
-        {
-            return new ExecutorResult
-            {
-                ExitCode = 1,
-                Output = errorMessage,
-                Reference = path,
-            };
-        }
-
-        return new ExecutorResult
-        {
-            ExitCode = 0,
-            Output = "Updated .gitmodules file",
-            Reference = path,
-        };
-    }
-
-    private ExecutorResult<GitRepository> GetRepository(string path, bool isSubmodule, CancellationToken cancellationToken = default)
+    private ExecuteResult<GitRepository> GetRepository(string path, bool isSubmodule, CancellationToken cancellationToken = default)
     {
         var defaultBranchExecResult = GetDefaultBranch(path, cancellationToken);
         var currentBranchExecResult = GetCurrentBranch(path, cancellationToken);
 
-        return ExecutorResult.CreateWithObject(new GitRepository()
+        return ExecuteResult.CreateWithObject(new GitRepository()
         {
             Error = new string?[] { currentBranchExecResult.Success ? null : currentBranchExecResult.Output, defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output }.CombineNonNull("; "),
-            CurrentBranch = currentBranchExecResult.Object,
-            DefaultBranch = defaultBranchExecResult.Object,
+            CurrentBranch = currentBranchExecResult.Value,
+            DefaultBranch = defaultBranchExecResult.Value,
             IsSubmodule = isSubmodule,
             Path = path
         }, path);
     }
 
-    private async Task<ExecutorResult<GitRepository>> GetRepositoryAsync(string path, bool isSubmodule, CancellationToken cancellationToken = default)
+    private async Task<ExecuteResult<GitRepository>> GetRepositoryAsync(string path, bool isSubmodule, CancellationToken cancellationToken = default)
     {
         var defaultBranchExecResult = await GetDefaultBranchAsync(path, cancellationToken);
         var currentBranchExecResult = await GetCurrentBranchAsync(path, cancellationToken);
 
-        return ExecutorResult.CreateWithObject(new GitRepository()
+        return ExecuteResult.CreateWithObject(new GitRepository()
         {
             Error = new string?[] { currentBranchExecResult.Success ? null : currentBranchExecResult.Output, defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output }.CombineNonNull("; "),
-            CurrentBranch = currentBranchExecResult.Object,
-            DefaultBranch = defaultBranchExecResult.Object,
+            CurrentBranch = currentBranchExecResult.Value,
+            DefaultBranch = defaultBranchExecResult.Value,
             IsSubmodule = isSubmodule,
             Path = path
         }, path);
@@ -475,3 +437,5 @@ public class Git
 
     #endregion 
 }
+
+#pragma warning restore CA1822 // Mark members as static

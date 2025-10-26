@@ -4,27 +4,55 @@ namespace Kokoabim.GitTasks;
 
 public class GitLogEntry
 {
+    #region properties
+    public string[] Approvers { get; set; } = [];
+    public DateTime AuthorDate { get; set; }
+    public string AuthorEmail { get; set; }
+    public string AuthorName { get; set; }
+    public string? Branch { get; set; }
+    public DateTime CommitDate { get; set; }
+    public string CommitterName { get; set; }
+    public string Decorations { get; set; }
+    public GitHash Hash { get; set; }
+    public string Message { get; set; }
+    public string MessageBody { get; set; }
+    public string MessageSubject { get; set; }
+    public IReadOnlyCollection<GitLogEntryNumStat> NumStats { get; set; } = [];
+    public GitLogNumStatsTotals NumStatsTotals { get; set; } = new();
+    public IReadOnlyCollection<GitHash> ParentHashes { get; set; } = [];
+    public string? Repository { get; set; }
+    #endregion 
+
     private static readonly Regex _approvedByMatcher = new(@"^Approved-by: (?<ApprovedBy>.+)$", RegexOptions.Multiline);
     private static readonly Regex _entriesMatcher = new(@"AuthorDate=(?<AuthorDate>[^\n]*)\nAuthorName=(?<AuthorName>[^\n]*)\nAuthorEmail=(?<AuthorEmail>[^\n]*)\nCommitDate=(?<CommitDate>[^\n]*)\nCommitterName=(?<CommitterName>[^\n]*)\nDecorations=(?<Decorations>.*?)\nHash=(?<Hash>[0-9a-f]+)\nMessageBody=(?<MessageBody>.*?)\nMessageSubject=(?<MessageSubject>[^\n]*)\nParentHashes=(?<ParentHashes>[^\n]*)\nNumStats=\n(?<NumStats>(?:\d+\t\d+\t[^\n]+\n?)*)", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase);
     private static readonly Regex _threeOrMoreNewLinesMatcher = new(@"\n{3,}");
     private static readonly Regex _twoOrMoreNewLinesMatcher = new(@"\n{2,}");
 
-    public string[]? Approvers { get; set; }
-    public DateTime AuthorDate { get; set; } // %ad
-    public string AuthorName { get; set; } = null!; // %an
-    public string AuthorEmail { get; set; } = null!; // %ae
-    public string Branch { get; set; } = null!;
-    public DateTime CommitDate { get; set; } // %cd
-    public string CommitterName { get; set; } = null!; // %cn
-    public string Decorations { get; set; } = null!; // %d
-    public GitHash Hash { get; set; } = null!; // %H
-    public string Message { get; set; } = null!;
-    public string MessageBody { get; set; } = null!; // %B
-    public string MessageSubject { get; set; } = null!; // %s
-    public IReadOnlyCollection<GitLogEntryNumStat> NumStats { get; set; } = []; // --numstat
-    public GitLogNumStatsTotals NumStatsTotals { get; set; } = null!;
-    public IReadOnlyCollection<GitHash> ParentHashes { get; set; } = null!; // %P
-    public string Repository { get; set; } = null!;
+    public GitLogEntry(
+        DateTime authorDate,
+        string authorEmail,
+        string authorName,
+        DateTime commitDate,
+        string committerName,
+        string decorations,
+        GitHash hash,
+        string messageBody,
+        string messageSubject)
+    {
+        AuthorDate = authorDate;
+        AuthorEmail = authorEmail;
+        AuthorName = authorName;
+        CommitDate = commitDate;
+        CommitterName = committerName;
+        Decorations = decorations;
+        Hash = hash;
+        MessageBody = messageBody ?? string.Empty;
+        MessageSubject = messageSubject ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(MessageSubject) && !string.IsNullOrWhiteSpace(MessageBody)) Message = $"{MessageSubject}\n\n{MessageBody}";
+        else if (!string.IsNullOrWhiteSpace(MessageSubject)) Message = MessageSubject;
+        else Message = MessageBody;
+    }
 
     public static IReadOnlyCollection<GitLogEntry> ParseMany(string gitLogText, bool doNotCompactMessages = false)
     {
@@ -34,18 +62,17 @@ public class GitLogEntry
         var entries = new List<GitLogEntry>();
         foreach (Match match in matches)
         {
-            var entry = new GitLogEntry
-            {
-                AuthorDate = DateTime.Parse(match.Groups["AuthorDate"].Value),
-                AuthorName = match.Groups["AuthorName"].Value,
-                AuthorEmail = match.Groups["AuthorEmail"].Value,
-                CommitDate = DateTime.Parse(match.Groups["CommitDate"].Value),
-                CommitterName = match.Groups["CommitterName"].Value,
-                Decorations = match.Groups["Decorations"].Value.Trim(' ', '(', ')'),
-                Hash = new GitHash(match.Groups["Hash"].Value),
-                MessageBody = match.Groups["MessageBody"].Value.Trim(),
-                MessageSubject = match.Groups["MessageSubject"].Value.Trim()
-            };
+            var entry = new GitLogEntry(
+                DateTime.Parse(match.Groups["AuthorDate"].Value),
+                match.Groups["AuthorEmail"].Value,
+                match.Groups["AuthorName"].Value,
+                DateTime.Parse(match.Groups["CommitDate"].Value),
+                match.Groups["CommitterName"].Value,
+                match.Groups["Decorations"].Value.Trim(' ', '(', ')'),
+                new GitHash(match.Groups["Hash"].Value),
+                match.Groups["MessageBody"].Value.Trim(),
+                match.Groups["MessageSubject"].Value.Trim()
+            );
 
             if (entry.MessageBody.StartsWith(entry.MessageSubject)) entry.MessageBody = entry.MessageBody[entry.MessageSubject.Length..].Trim();
 
@@ -89,12 +116,11 @@ public class GitLogEntry
                     int.TryParse(parts[0], out int addedLines) &&
                     int.TryParse(parts[1], out int deletedLines))
                 {
-                    numStats.Add(new GitLogEntryNumStat
-                    {
-                        AddedLines = addedLines,
-                        DeletedLines = deletedLines,
-                        FilePath = parts[2]
-                    });
+                    numStats.Add(new GitLogEntryNumStat(
+                        addedLines,
+                        deletedLines,
+                        parts[2]
+                    ));
                 }
             }
             entry.NumStats = numStats;
@@ -110,18 +136,4 @@ public class GitLogEntry
         }
         return entries;
     }
-}
-
-public class GitLogEntryNumStat
-{
-    public int AddedLines { get; set; }
-    public int DeletedLines { get; set; }
-    public string FilePath { get; set; } = null!;
-}
-
-public class GitLogNumStatsTotals
-{
-    public int AddedLines { get; set; }
-    public int DeletedLines { get; set; }
-    public int FilesChanged { get; set; }
 }

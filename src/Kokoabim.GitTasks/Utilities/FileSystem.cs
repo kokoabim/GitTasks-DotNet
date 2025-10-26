@@ -1,17 +1,8 @@
 namespace Kokoabim.GitTasks;
 
-public interface IFileSystem
-{
-    bool FileExists(string path);
-    bool FileExists(string path, string fileName);
-    string GetFullPath(string path);
-    string[] GetGitDirectories(string path);
-    bool IsGitDirectory(string path);
-    string? ReadFile(string path, string? fileName = null);
-    Task<string?> ReadFileAsync(string path, string? fileName = null);
-}
+#pragma warning disable CA1822 // Mark members as static
 
-public class FileSystem : IFileSystem
+public class FileSystem
 {
     public bool FileExists(string path) => File.Exists(path);
 
@@ -62,3 +53,5 @@ public class FileSystem : IFileSystem
         if (depth > 0) foreach (var d in Directory.GetDirectories(path)) GetGitDirectories(directories, d, depth - 1);
     }
 }
+
+#pragma warning restore CA1822 // Mark members as static

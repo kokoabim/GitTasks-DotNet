@@ -2,7 +2,7 @@ using Kokoabim.CommandLineInterface;
 
 namespace Kokoabim.GitTasks;
 
-public static class Arguments
+public static class GitTasksArguments
 {
     #region properties
 
@@ -81,6 +81,99 @@ public static class Arguments
         defaultValue: false
     );
 
+    public static ConsoleArgument LogAfterOption => new(
+        type: ArgumentType.Option,
+        identifier: "a",
+        name: "after",
+        helpText: "Show commits after a specific date (default: 7 days ago)",
+        defaultValue: "7 days ago"
+    );
+
+    public static ConsoleArgument LogAuthorOption => new(
+        type: ArgumentType.Option,
+        identifier: "c",
+        name: "author",
+        helpText: "Commits by a specific author"
+    );
+
+    public static ConsoleArgument LogBeforeOption => new(
+        type: ArgumentType.Option,
+        identifier: "b",
+        name: "before",
+        helpText: "Show commits before a specific date"
+    );
+
+    public static ConsoleArgument LogBranchPatternOption => new(
+        type: ArgumentType.Option,
+        identifier: "d",
+        name: "branch",
+        helpText: "Show commits with branch matching a specific pattern"
+    );
+
+    public static ConsoleArgument LogDoNotCompactMessageSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "c",
+        name: "no-compact",
+        helpText: "Do not compact commit messages"
+    );
+
+    public static ConsoleArgument LogDoNotFetchSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "F",
+        name: "no-fetch",
+        helpText: "Do not fetch from remote before showing log"
+    );
+
+    public static ConsoleArgument LogDoNotIncludeAllSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "l",
+        name: "not-all",
+        helpText: "Do not include all refs (default: include all refs)"
+    );
+
+    public static ConsoleArgument LogFilePatternOption => new(
+        type: ArgumentType.Option,
+        identifier: "f",
+        name: "file",
+        helpText: "Show commits affecting specific files or paths"
+    );
+
+    public static ConsoleArgument LogIncludeMergesSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "g",
+        name: "merges",
+        helpText: "Include merge commits"
+    );
+
+    public static ConsoleArgument LogMergesOnlySwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "G",
+        name: "merges-only",
+        helpText: "Show only merge commits"
+    );
+
+    public static ConsoleArgument LogMessagePatternOption => new(
+        type: ArgumentType.Option,
+        identifier: "m",
+        name: "message",
+        helpText: "Show commits with message matching a specific pattern"
+    );
+
+    public static ConsoleArgument LogRemoteNameOption => new(
+        type: ArgumentType.Option,
+        identifier: "r",
+        name: "remote",
+        helpText: "Show commits from a specific remote (default: origin)",
+        defaultValue: "origin"
+    );
+
+    public static ConsoleArgument LogSubjectOnlySwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "s",
+        name: "subject-only",
+        helpText: "Show only commit subjects"
+    );
+
     public static ConsoleArgument MoveBackOption => new(
         type: ArgumentType.Option,
         identifier: "b",
@@ -105,118 +198,21 @@ public static class Arguments
         helpText: "Show pending changes"
     );
 
-    #endregion 
-
-    #region fields
-
-    public static readonly ConsoleArgument LogAfterOption = new(
-        type: ArgumentType.Option,
-        identifier: "a",
-        name: "after",
-        helpText: "Show commits after a specific date (default: 7 days ago)",
-        defaultValue: "7 days ago"
-    );
-
-    public static readonly ConsoleArgument LogAuthorOption = new(
-        type: ArgumentType.Option,
-        identifier: "c",
-        name: "author",
-        helpText: "Commits by a specific author"
-    );
-
-    public static readonly ConsoleArgument LogBeforeOption = new(
-        type: ArgumentType.Option,
-        identifier: "b",
-        name: "before",
-        helpText: "Show commits before a specific date"
-    );
-
-    public static readonly ConsoleArgument LogBranchPatternOption = new(
-        type: ArgumentType.Option,
-        identifier: "d",
-        name: "branch",
-        helpText: "Show commits with branch matching a specific pattern"
-    );
-
-    public static readonly ConsoleArgument LogDoNotCompactMessageSwitch = new(
-        type: ArgumentType.Switch,
-        identifier: "c",
-        name: "no-compact",
-        helpText: "Do not compact commit messages"
-    );
-
-    public static readonly ConsoleArgument LogFilePatternOption = new(
-        type: ArgumentType.Option,
-        identifier: "f",
-        name: "file",
-        helpText: "Show commits affecting specific files or paths"
-    );
-
-    public static readonly ConsoleArgument LogDoNotFetchSwitch = new(
-        type: ArgumentType.Switch,
-        identifier: "F",
-        name: "no-fetch",
-        helpText: "Do not fetch from remote before showing log"
-    );
-
-    public static readonly ConsoleArgument LogDoNotIncludeAllSwitch = new(
-        type: ArgumentType.Switch,
-        identifier: "l",
-        name: "not-all",
-        helpText: "Do not include all refs (default: include all refs)"
-    );
-
-    public static readonly ConsoleArgument LogIncludeMergesSwitch = new(
-        type: ArgumentType.Switch,
-        identifier: "g",
-        name: "merges",
-        helpText: "Include merge commits"
-    );
-
-    public static readonly ConsoleArgument LogMergesOnlySwitch = new(
-        type: ArgumentType.Switch,
-        identifier: "G",
-        name: "merges-only",
-        helpText: "Show only merge commits"
-    );
-
-    public static readonly ConsoleArgument LogMessagePatternOption = new(
-        type: ArgumentType.Option,
-        identifier: "m",
-        name: "message",
-        helpText: "Show commits with message matching a specific pattern"
-    );
-
-    public static readonly ConsoleArgument LogRemoteNameOption = new(
-        type: ArgumentType.Option,
-        identifier: "r",
-        name: "remote",
-        helpText: "Show commits from a specific remote (default: origin)",
-        defaultValue: "origin"
-    );
-
-    public static readonly ConsoleArgument LogSubjectOnlySwitch = new(
-        type: ArgumentType.Switch,
-        identifier: "s",
-        name: "subject-only",
-        helpText: "Show only commit subjects"
-    );
-
-    public static readonly ConsoleArgument PullSwitch = new(
+    public static ConsoleArgument PullSwitch => new(
         type: ArgumentType.Switch,
         identifier: "p",
         name: "pull",
         helpText: "Pull changes from remote"
     );
 
-    public static readonly ConsoleArgument PushSwitch = new(
+    public static ConsoleArgument PushSwitch => new(
         type: ArgumentType.Switch,
         identifier: "p",
         name: "push",
         helpText: "Push changes to remote"
     );
 
-    public static readonly ConsoleArgument RecursivelySwitch = new(
+    public static ConsoleArgument RecursivelySwitch => new(
         type: ArgumentType.Switch,
         identifier: "d",
         name: "recursive",
@@ -224,14 +220,14 @@ public static class Arguments
         defaultValue: false
     );
 
-    public static readonly ConsoleArgument ResetCleanSwitch = new(
+    public static ConsoleArgument ResetCleanSwitch => new(
         type: ArgumentType.Switch,
         identifier: "u",
         name: "clean",
         helpText: "Remove untracked files"
     );
 
-    public static readonly ConsoleArgument ResetModeOption = new(
+    public static ConsoleArgument ResetModeOption => new(
         type: ArgumentType.Option,
         identifier: "m",
         name: "mode",
@@ -241,14 +237,14 @@ public static class Arguments
         constraintType: typeof(GitResetMode)
     );
 
-    public static readonly ConsoleArgument ShowGitOutputSwitch = new(
+    public static ConsoleArgument ShowGitOutputSwitch => new(
         type: ArgumentType.Switch,
         identifier: "s",
         name: "show-output",
         helpText: "Show git output"
     );
 
-    public static readonly ConsoleArgument SubmoduleIgnoreArgument = new(
+    public static ConsoleArgument SubmoduleIgnoreArgument => new(
         type: ArgumentType.Positional,
         name: "ignore-option",
         helpText: "Submodule ignore option (none, untracked, dirty, all; default: none)",

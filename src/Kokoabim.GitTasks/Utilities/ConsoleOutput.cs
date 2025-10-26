@@ -153,7 +153,7 @@ public static class ConsoleOutput
 
         var hasError = !repository.Results.CommitPosition.Success;
         var hasPositions = false;
-        var commitPosition = repository.Results.CommitPosition.Object;
+        var commitPosition = repository.Results.CommitPosition.Value;
 
         var output = repository.Results.CommitPosition.Output ?? "";
         string? aheadBy = null;
@@ -296,7 +296,7 @@ public static class ConsoleOutput
         repository.ConsolePosition.Left += message.Length + 1;
     }
 
-    public static void WriteHeaderRepository(ExecutorResult<GitRepository> repositoryExecResult, bool withStatus = false, bool newline = true)
+    public static void WriteHeaderRepository(ExecuteResult<GitRepository> repositoryExecResult, bool withStatus = false, bool newline = true)
     {
         if (!repositoryExecResult.Success)
         {
@@ -308,7 +308,7 @@ public static class ConsoleOutput
             return;
         }
 
-        var repo = repositoryExecResult.Object!;
+        var repo = repositoryExecResult.Value!;
 
         WriteNormal(repo.RelativePath);
         repo.ConsolePosition.Left += repo.RelativePath.Length;
@@ -420,7 +420,7 @@ public static class ConsoleOutput
         repo.ConsolePosition.Left += message.Length + 1;
     }
 
-    public static int WriteHeadersRepositories(ExecutorResult<GitRepository>[] repositoryExecResults)
+    public static int WriteHeadersRepositories(ExecuteResult<GitRepository>[] repositoryExecResults)
     {
         var offset = Console.CursorTop + repositoryExecResults.Length < Console.WindowHeight
             ? Console.CursorTop
@@ -429,7 +429,7 @@ public static class ConsoleOutput
         for (int i = 0; i < repositoryExecResults.Length; i++)
         {
             var repoExecResult = repositoryExecResults[i];
-            if (repoExecResult.Object is not null) repoExecResult.Object.ConsolePosition.Top = i + offset;
+            if (repoExecResult.Value is not null) repoExecResult.Value.ConsolePosition.Top = i + offset;
         }
 
         foreach (var repoExecResult in repositoryExecResults) WriteHeaderRepository(repoExecResult, withStatus: false, newline: true);
@@ -469,7 +469,7 @@ public static class ConsoleOutput
                     entry.Branch,
                     entry.Decorations,
                     string.Join(", ", entry.ParentHashes.Select(h => h.Abbreviated)),
-                    entry.Approvers is not null && entry.Approvers.Length > 0 ? string.Join(", ", entry.Approvers) : null
+                    entry.Approvers.Length > 0 ? string.Join(", ", entry.Approvers) : null
                 }.CombineNonNullOrWhiteSpace(" • ")!,
                 newline: true);
             Console.WriteLine();
@@ -581,10 +581,4 @@ public static class ConsoleOutput
     }
 
     #endregion 
-}
-
-public class ConsolePosition
-{
-    public int Left { get; set; }
-    public int Top { get; set; }
 }

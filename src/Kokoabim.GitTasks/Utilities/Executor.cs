@@ -6,10 +6,10 @@ namespace Kokoabim.GitTasks;
 
 public class Executor
 {
-    public ExecutorResult Execute(string fileName, string? arguments = null, string? workingDirectory = null, CancellationToken cancellationToken = default)
+    public ExecuteResult Execute(string fileName, string? arguments = null, string? workingDirectory = null, CancellationToken cancellationToken = default)
     {
-        var outputText = new StringBuilder();
-        var result = new ExecutorResult();
+        var execResult = new ExecuteResult();
+        var output = new StringBuilder();
 
         using Process process = new();
 
@@ -20,7 +20,7 @@ public class Executor
                 if (!process.HasExited)
                 {
                     process.Kill(true);
-                    result.Killed = true;
+                    execResult.Killed = true;
                 }
             }
             catch { }
@@ -28,23 +28,23 @@ public class Executor
 
         process.StartInfo = new()
         {
-            FileName = fileName,
             Arguments = arguments,
-            WorkingDirectory = workingDirectory,
+            CreateNoWindow = true,
+            FileName = fileName,
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-
-        process.OutputDataReceived += (sender, e) =>
-        {
-            if (e.Data is not null) outputText.AppendLine(e.Data);
+            WorkingDirectory = workingDirectory,
         };
 
         process.ErrorDataReceived += (sender, e) =>
         {
-            if (e.Data is not null) outputText.AppendLine(e.Data);
+            if (e.Data is not null) output.AppendLine(e.Data);
+        };
+
+        process.OutputDataReceived += (sender, e) =>
+        {
+            if (e.Data is not null) output.AppendLine(e.Data);
         };
 
         try
@@ -52,32 +52,32 @@ public class Executor
 
             if (!process.Start())
             {
-                result.Exception = new InvalidOperationException($"Failed to start process: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}");
-                return result;
+                execResult.Exception = new InvalidOperationException($"Failed to start process: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}");
+                return execResult;
             }
 
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             process.WaitForExit();
-            result.ExitCode = process.ExitCode;
+            execResult.ExitCode = process.ExitCode;
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 0x00000002)
         {
-            result.Exception = new FileNotFoundException($"File not found: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}", ex);
+            execResult.Exception = new FileNotFoundException($"File not found: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}", ex);
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 0x00000005)
         {
-            result.Exception = new UnauthorizedAccessException($"Access denied: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}", ex);
+            execResult.Exception = new UnauthorizedAccessException($"Access denied: {fileName}{(string.IsNullOrWhiteSpace(workingDirectory) ? null : $" ({workingDirectory})")}", ex);
         }
         catch (Exception ex)
         {
-            result.Exception = ex;
+            execResult.Exception = ex;
         }
 
-        result.Output = outputText.ToString().TrimEnd();
-        return result;
+        execResult.Output = output.ToString().TrimEnd();
+        return execResult;
     }
 
-    public async Task<ExecutorResult> ExecuteAsync(string fileName, string? arguments = null, string? workingDirectory = null, CancellationToken cancellationToken = default) =>
+    public async Task<ExecuteResult> ExecuteAsync(string fileName, string? arguments = null, string? workingDirectory = null, CancellationToken cancellationToken = default) =>
         await Task.Run(() => Execute(fileName, arguments, workingDirectory, cancellationToken));
 }
