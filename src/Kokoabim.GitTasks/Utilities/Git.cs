@@ -59,6 +59,9 @@ public class Git
         return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
+    public ExecuteResult Fetch(string path, string? branch = null, CancellationToken cancellationToken = default) =>
+        _executor.Execute("git", branch is null ? "fetch" : $"fetch origin {branch}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+
     public async Task<ExecuteResult> FetchAsync(string path, string? branch = null, CancellationToken cancellationToken = default)
     {
         var args = branch is null ? "fetch" : $"fetch origin {branch}";
@@ -84,7 +87,7 @@ public class Git
         return result.WithValue(branches);
     }
 
-    public ExecuteResult<GitCommitPosition> GetCommitPosition(string path, string? branch = null, CancellationToken cancellationToken = default)
+    public ExecuteResult<GitCommitPosition> GetCommitPosition(string path, string branch, CancellationToken cancellationToken = default)
     {
         var execResult = _executor.Execute("git", $"rev-list --left-right --count \"origin/{branch}...{branch}\"", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
         if (!execResult.Success) return execResult.WithNull<GitCommitPosition>();
@@ -149,23 +152,23 @@ public class Git
             ? ExecuteResult.CreateWithObject<GitModulesFile?>(gitModulesFile, path)
             : new ExecuteResult<GitModulesFile?> { ExitCode = 1, Output = errorMessage, Reference = path };
 
-    public async Task<ExecuteResult<GitLogEntry[]>> GetLogAsync(string path, string branch, string remoteName = "origin", string? after = null, string? before = null, string? author = null, string? messagePattern = null, string? logFilePattern = null, bool doNotIncludeAll = false, bool includeMerges = false, bool mergesOnly = false, bool doNotCompactMessages = false, CancellationToken cancellationToken = default)
+    public ExecuteResult<GitLogEntry[]> GetLog(GitLogSettings settings, CancellationToken cancellationToken = default)
     {
-        var repoUrlExecResult = RepositoryName(path, remoteName, cancellationToken);
-        if (!repoUrlExecResult.Success) return repoUrlExecResult.WithValue<GitLogEntry[]>([], path);
+        var repoUrlExecResult = RepositoryName(settings.Path!, settings.RemoteName!, cancellationToken);
+        if (!repoUrlExecResult.Success) return repoUrlExecResult.WithValue<GitLogEntry[]>([], settings.Path);
         var repoName = repoUrlExecResult.Value;
 
         var args = $"--no-pager log --numstat --date=iso --pretty=format:\"{_gitLogFormat}\"";
-        if (after is not null) args += $" --after=\"{after}\"";
-        if (before is not null) args += $" --before=\"{before}\"";
-        if (author is not null) args += $" --author=\"{author}\"";
-        if (!doNotIncludeAll) args += " --all";
-        if (!includeMerges) args += " --no-merges"; else if (mergesOnly) args += " --merges";
+        if (settings.AfterRelativeDate is not null) args += $" --after=\"{settings.AfterRelativeDate}\"";
+        if (settings.BeforeRelativeDate is not null) args += $" --before=\"{settings.BeforeRelativeDate}\"";
+        if (settings.AuthorName is not null) args += $" --author=\"{settings.AuthorName}\"";
+        if (!settings.DoNotIncludeAll) args += " --all";
+        if (!settings.IncludeMerges) args += " --no-merges"; else if (settings.MergesOnly) args += " --merges";
 
-        var gitLogExecResult = await _executor.ExecuteAsync("git", $"{args} {branch}", workingDirectory: path, cancellationToken: cancellationToken);
+        var gitLogExecResult = _executor.Execute("git", $"{args} {settings.Branch}", workingDirectory: settings.Path, cancellationToken: cancellationToken);
         if (!gitLogExecResult.Success)
         {
-            return gitLogExecResult.WithNull<GitLogEntry[]>(path);
+            return gitLogExecResult.WithNull<GitLogEntry[]>(settings.Path);
         }
 
         var entries = GitLogEntry.ParseMany(gitLogExecResult.Output).ToList();
@@ -174,12 +177,12 @@ public class Git
             ExitCode = 0,
             Output = "No log entries found.",
             Value = [],
-            Reference = path,
+            Reference = settings.Path,
         };
 
-        if (!string.IsNullOrWhiteSpace(messagePattern))
+        if (!string.IsNullOrWhiteSpace(settings.MessagePattern))
         {
-            var logMessageRegex = new Regex(messagePattern, RegexOptions.IgnoreCase);
+            var logMessageRegex = new Regex(settings.MessagePattern, RegexOptions.IgnoreCase);
             entries.RemoveAll(e => logMessageRegex.IsMatch(e.Message));
 
             if (entries.Count == 0)
@@ -189,15 +192,15 @@ public class Git
                     ExitCode = 0,
                     Output = "No log entries found matching the specified message pattern.",
                     Value = [],
-                    Reference = path,
+                    Reference = settings.Path,
                 };
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(logFilePattern))
+        if (!string.IsNullOrWhiteSpace(settings.FilePattern))
         {
-            var logFileRegex = new Regex(logFilePattern, RegexOptions.IgnoreCase);
-            entries.RemoveAll(e => !e.NumStats.Any(ns => logFileRegex.IsMatch(ns.FilePath)));
+            var fileMatcher = new Regex(settings.FilePattern, RegexOptions.IgnoreCase);
+            entries.RemoveAll(e => !e.NumStats.Any(ns => fileMatcher.IsMatch(ns.FilePath)));
 
             if (entries.Count == 0)
             {
@@ -206,18 +209,18 @@ public class Git
                     ExitCode = 0,
                     Output = "No log entries found matching the specified file pattern.",
                     Value = [],
-                    Reference = path,
+                    Reference = settings.Path,
                 };
             }
         }
 
         var distinctOrderedLogEntries = entries
             .DistinctBy(le => le.Hash)
-            .ForEach(e => { e.Branch = branch; e.Repository = repoName; })
+            .ForEach(e => { e.Branch = settings.Branch; e.Repository = repoName; })
             .OrderByDescending(le => le.AuthorDate)
             .ToArray();
 
-        return ExecuteResult.CreateWithObject(distinctOrderedLogEntries, path);
+        return ExecuteResult.CreateWithObject(distinctOrderedLogEntries, settings.Path);
     }
 
     public ExecuteResult<GitRepository>[] GetRepositories(string path, CancellationToken cancellationToken = default)
@@ -277,6 +280,9 @@ public class Git
         var result = await _executor.ExecuteAsync("git", "--version", cancellationToken: cancellationToken);
         return result.Success ? result.Output.Trim() : null;
     }
+
+    public ExecuteResult Pull(string path, CancellationToken cancellationToken = default) =>
+        _executor.Execute("git", "pull", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
 
     public async Task<ExecuteResult> PullAsync(string path, CancellationToken cancellationToken = default) =>
         (await _executor.ExecuteAsync("git", "pull", workingDirectory: path, cancellationToken: cancellationToken)).WithReference(path);

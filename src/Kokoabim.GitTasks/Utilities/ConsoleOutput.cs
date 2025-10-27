@@ -203,7 +203,7 @@ public static class ConsoleOutput
         }
     }
 
-    public static void WriteHeaderDynamicallyStatus(GitRepository repository)
+    public static void WriteHeaderDynamicallyStatus(GitRepository repository, bool withActivity = false)
     {
         ClearHeaderDynamicallyActivity(repository);
 
@@ -231,6 +231,8 @@ public static class ConsoleOutput
         }
 
         repository.ConsolePosition.Left += message.Length;
+
+        if (withActivity) WriteHeaderDynamicallyActivity(repository);
     }
 
     public static void WriteHeaderMatchBranch(GitRepository r, GitBranch[]? matchingBranches, bool dynamically)
@@ -296,7 +298,7 @@ public static class ConsoleOutput
         repository.ConsolePosition.Left += message.Length + 1;
     }
 
-    public static void WriteHeaderRepository(ExecuteResult<GitRepository> repositoryExecResult, bool withStatus = false, bool newline = true)
+    public static void WriteHeaderRepository(ExecuteResult<GitRepository> repositoryExecResult, bool withStatus = false, bool newline = true, bool withActivity = false)
     {
         if (!repositoryExecResult.Success)
         {
@@ -346,6 +348,8 @@ public static class ConsoleOutput
 
             repo.ConsolePosition.Left += message.Length;
         }
+
+        if (withActivity) WriteHeaderDynamicallyActivity(repo);
 
         if (newline) Console.WriteLine();
     }
@@ -420,7 +424,7 @@ public static class ConsoleOutput
         repo.ConsolePosition.Left += message.Length + 1;
     }
 
-    public static int WriteHeadersRepositories(ExecuteResult<GitRepository>[] repositoryExecResults)
+    public static int WriteHeadersRepositories(ExecuteResult<GitRepository>[] repositoryExecResults, bool withActivity = false)
     {
         var offset = Console.CursorTop + repositoryExecResults.Length < Console.WindowHeight
             ? Console.CursorTop
@@ -432,7 +436,7 @@ public static class ConsoleOutput
             if (repoExecResult.Value is not null) repoExecResult.Value.ConsolePosition.Top = i + offset;
         }
 
-        foreach (var repoExecResult in repositoryExecResults) WriteHeaderRepository(repoExecResult, withStatus: false, newline: true);
+        foreach (var repoExecResult in repositoryExecResults) WriteHeaderRepository(repoExecResult, withStatus: false, newline: true, withActivity: withActivity);
 
         return Console.CursorTop;
     }

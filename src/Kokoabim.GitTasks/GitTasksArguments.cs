@@ -6,11 +6,25 @@ public static class GitTasksArguments
 {
     #region properties
 
-    public static ConsoleArgument BranchOrCommitArgument => new(
+    public static ConsoleArgument CheckoutBranchOrCommitArgument => new(
         type: ArgumentType.Positional,
         name: "branch-or-commit",
         helpText: "Branch name or commit hash",
         isRequired: true
+    );
+
+    public static ConsoleArgument CheckoutCreateBranchSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "b",
+        name: "create-branch",
+        helpText: "Create and switch to a new branch"
+    );
+
+    public static ConsoleArgument MainPullSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "p",
+        name: "pull",
+        helpText: "Pull changes from remote"
     );
 
     public static ConsoleArgument CleanDryRunSwitch => new(
@@ -21,11 +35,35 @@ public static class GitTasksArguments
             defaultValue: false
         );
 
+    public static ConsoleArgument CleanForceSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "f",
+        name: "force",
+        helpText: "Force",
+        defaultValue: false
+    );
+
+    public static ConsoleArgument CleanIgnoreIgnoredFilesSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "x",
+        name: "ignore-rules",
+        helpText: "Ignore .gitignore rules",
+        defaultValue: false
+    );
+
     public static ConsoleArgument CleanOnlyIgnoredSwitch => new(
         type: ArgumentType.Switch,
         identifier: "X",
         name: "only-ignored",
         helpText: "Remove only ignored files",
+        defaultValue: false
+    );
+
+    public static ConsoleArgument CleanRecursivelySwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "d",
+        name: "recursive",
+        helpText: "Recursively",
         defaultValue: false
     );
 
@@ -51,34 +89,11 @@ public static class GitTasksArguments
         helpText: "Create a new branch and check it out"
     );
 
-    public static ConsoleArgument CreateBranchSwitch => new(
-        type: ArgumentType.Switch,
-        identifier: "b",
-        name: "create-branch",
-        helpText: "Create and switch to a new branch"
-    );
-
     public static ConsoleArgument FetchSwitch => new(
         type: ArgumentType.Switch,
         identifier: "f",
         name: "fetch",
         helpText: "Fetch changes from remote"
-    );
-
-    public static ConsoleArgument ForceSwitch => new(
-        type: ArgumentType.Switch,
-        identifier: "f",
-        name: "force",
-        helpText: "Force",
-        defaultValue: false
-    );
-
-    public static ConsoleArgument IgnoreIgnoredFilesSwitch => new(
-        type: ArgumentType.Switch,
-        identifier: "x",
-        name: "ignore-rules",
-        helpText: "Ignore .gitignore rules",
-        defaultValue: false
     );
 
     public static ConsoleArgument LogAfterOption => new(
@@ -198,26 +213,11 @@ public static class GitTasksArguments
         helpText: "Show pending changes"
     );
 
-    public static ConsoleArgument PullSwitch => new(
-        type: ArgumentType.Switch,
-        identifier: "p",
-        name: "pull",
-        helpText: "Pull changes from remote"
-    );
-
     public static ConsoleArgument PushSwitch => new(
         type: ArgumentType.Switch,
         identifier: "p",
         name: "push",
         helpText: "Push changes to remote"
-    );
-
-    public static ConsoleArgument RecursivelySwitch => new(
-        type: ArgumentType.Switch,
-        identifier: "d",
-        name: "recursive",
-        helpText: "Recursively",
-        defaultValue: false
     );
 
     public static ConsoleArgument ResetCleanSwitch => new(

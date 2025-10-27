@@ -24,9 +24,9 @@ public static class GitTasksCommands
         name: "checkout",
         titleText: "Checkout a branch or commit",
         arguments: [
-            GitTasksArguments.BranchOrCommitArgument,
+            GitTasksArguments.CheckoutBranchOrCommitArgument,
             GitTasksArguments.PathArgument,
-            GitTasksArguments.CreateBranchSwitch,
+            GitTasksArguments.CheckoutCreateBranchSwitch,
             GitTasksArguments.ShowGitOutputSwitch
         ],
         asyncFunction: GitTasksCommandOperations.CheckoutAsync
@@ -37,9 +37,9 @@ public static class GitTasksCommands
         titleText: "Remove untracked files",
         arguments: [
             GitTasksArguments.PathArgument,
-            GitTasksArguments.RecursivelySwitch,
-            GitTasksArguments.ForceSwitch,
-            GitTasksArguments.IgnoreIgnoredFilesSwitch,
+            GitTasksArguments.CleanRecursivelySwitch,
+            GitTasksArguments.CleanForceSwitch,
+            GitTasksArguments.CleanIgnoreIgnoredFilesSwitch,
             GitTasksArguments.CleanOnlyIgnoredSwitch,
             GitTasksArguments.CleanDryRunSwitch,
             GitTasksArguments.ShowGitOutputSwitch
@@ -54,7 +54,7 @@ public static class GitTasksCommands
             GitTasksArguments.PathArgument,
             GitTasksArguments.ShowGitOutputSwitch
         ],
-        asyncFunction: GitTasksCommandOperations.FixReferenceAsync
+        syncFunction: GitTasksCommandOperations.FixReference
     );
 
     private static ConsoleCommand LogCommand() => new(
@@ -75,7 +75,7 @@ public static class GitTasksCommands
             GitTasksArguments.LogRemoteNameOption,
             GitTasksArguments.LogSubjectOnlySwitch
         ],
-        asyncFunction: GitTasksCommandOperations.ShowLogAsync
+        syncFunction: GitTasksCommandOperations.ShowLog
     );
 
     private static ConsoleCommand MainCommand() => new(
@@ -83,7 +83,7 @@ public static class GitTasksCommands
         titleText: "Checkout default branch",
         arguments: [
             GitTasksArguments.PathArgument,
-            GitTasksArguments.PullSwitch,
+            GitTasksArguments.MainPullSwitch,
             GitTasksArguments.ShowGitOutputSwitch
         ],
         asyncFunction: GitTasksCommandOperations.CheckoutMainAsync
