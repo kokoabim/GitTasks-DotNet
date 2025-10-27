@@ -67,7 +67,7 @@ public static class GitTasksCommandOperations
         {
             var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true);
 
-            var tasks = repositoriesExecResults.Where(er => er.Success).ToDictionary(
+            var tasksByRepo = repositoriesExecResults.Where(er => er.Success).ToDictionary(
                 er => er.Value!,
                 er => Task.Run(() =>
                 {
@@ -87,7 +87,7 @@ public static class GitTasksCommandOperations
                 },
                 context.CancellationToken));
 
-            await Task.WhenAll(tasks.Values);
+            await Task.WhenAll(tasksByRepo.Values);
 
             Console.SetCursorPosition(0, cursorTop);
         }
@@ -101,7 +101,7 @@ public static class GitTasksCommandOperations
 
         var pullMainBranch = context.HasSwitch(GitTasksArguments.MainPullSwitch.Name);
 
-        var tasks = pullMainBranch
+        var tasksByRepo = pullMainBranch
             ? repositoriesExecResults.Where(er => er.Success).ToDictionary(
                 er => er.Value!,
                 er => Task.Run(() =>
@@ -140,9 +140,9 @@ public static class GitTasksCommandOperations
 
         if (pullMainBranch)
         {
-            await Task.WhenAll(tasks.Values);
+            await Task.WhenAll(tasksByRepo.Values);
 
-            foreach (var repo in tasks.Keys)
+            foreach (var repo in tasksByRepo.Keys)
             {
                 ConsoleOutput.WriteHeaderPull(repo, dynamically: true);
                 ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
@@ -185,7 +185,7 @@ public static class GitTasksCommandOperations
         {
             var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true);
 
-            var tasks = repositoriesExecResults.Where(r => r.Success).ToDictionary(
+            var tasksByRepo = repositoriesExecResults.Where(r => r.Success).ToDictionary(
                 er => er.Value!,
                 er => Task.Run(() =>
                 {
@@ -195,7 +195,7 @@ public static class GitTasksCommandOperations
                 },
                 context.CancellationToken));
 
-            await Task.WhenAll(tasks.Values);
+            await Task.WhenAll(tasksByRepo.Values);
 
             Console.SetCursorPosition(0, cursorTop);
         }
@@ -203,7 +203,7 @@ public static class GitTasksCommandOperations
         return 0;
     }
 
-    public static int FixReference(ConsoleContext context)
+    public static async Task<int> FixReferenceAsync(ConsoleContext context)
     {
         if (!TryGetRepositories(context, out ExecuteResult<GitRepository>[] repositoriesExecResults)) return 1;
 
@@ -229,7 +229,7 @@ public static class GitTasksCommandOperations
         {
             var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true);
 
-            var tasks = repositoriesExecResults.Where(r => r.Success).ToDictionary(
+            var tasksByRepo = repositoriesExecResults.Where(r => r.Success).ToDictionary(
                 er => er.Value!,
                 er => Task.Run(() =>
                 {
@@ -238,6 +238,8 @@ public static class GitTasksCommandOperations
                     ConsoleOutput.WriteHeaderSetHead(repo, dynamically: true);
                 },
                 context.CancellationToken));
+
+            await Task.WhenAll(tasksByRepo.Values);
 
             Console.SetCursorPosition(0, cursorTop);
         }
@@ -261,14 +263,21 @@ public static class GitTasksCommandOperations
         if (!TryGetRepositories(context, out ExecuteResult<GitRepository>[] repositoriesExecResults)) return 1;
 
         var showGitOutput = context.HasSwitch(GitTasksArguments.ShowGitOutputSwitch.Name);
+        var asynchronously = !showGitOutput;
 
-        var tasks = repositoriesExecResults.Where(r => r.Success).ToDictionary(
+        var cursorTop = asynchronously
+            ? ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true)
+            : -1;
+
+        var tasksByRepo = repositoriesExecResults.Where(r => r.Success).ToDictionary(
             er => er.Value!,
             er => Task.Run(() =>
             {
                 var repo = er.Value!;
                 repo.Results.Pull = _git.Pull(repo.Path, context.CancellationToken);
+                if (asynchronously) ConsoleOutput.WriteHeaderPull(repo, dynamically: true);
                 if (repo.CurrentBranch is not null) repo.Results.CommitPosition = _git.GetCommitPosition(repo.Path, repo.CurrentBranch, context.CancellationToken);
+                if (asynchronously) ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
             },
             context.CancellationToken));
 
@@ -281,7 +290,7 @@ public static class GitTasksCommandOperations
                 if (!repoExecResult.Success) continue;
                 var repo = repoExecResult.Value;
 
-                var task = tasks[repo];
+                var task = tasksByRepo[repo];
                 if (!task.IsCompleted) await task;
 
                 ConsoleOutput.WriteHeaderPull(repo, dynamically: false);
@@ -293,13 +302,7 @@ public static class GitTasksCommandOperations
         }
         else
         {
-            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true);
-
-            foreach (var repo in tasks.Keys)
-            {
-                ConsoleOutput.WriteHeaderPull(repo, dynamically: true);
-                ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
-            }
+            await Task.WhenAll(tasksByRepo.Values);
 
             Console.SetCursorPosition(0, cursorTop);
         }
@@ -317,7 +320,11 @@ public static class GitTasksCommandOperations
         var resetMode = context.GetOptionEnum<GitResetMode>(GitTasksArguments.ResetModeOption.Name);
         var showGitOutput = context.HasSwitch(GitTasksArguments.ShowGitOutputSwitch.Name);
 
-        var tasks = repositoriesExecResults.Where(r => r.Success).ToDictionary(
+        var cursorTop = !showGitOutput
+            ? ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true)
+            : -1;
+
+        var tasksByRepo = repositoriesExecResults.Where(r => r.Success).ToDictionary(
             er => er.Value!,
             er => Task.Run(() =>
             {
@@ -348,7 +355,7 @@ public static class GitTasksCommandOperations
                 if (!repoExecResult.Success) continue;
                 var repo = repoExecResult.Value;
 
-                var task = tasks[repo];
+                var task = tasksByRepo[repo];
                 if (!task.IsCompleted) await task;
 
                 ConsoleOutput.WriteHeaderReset(repo, dynamically: false);
@@ -361,9 +368,7 @@ public static class GitTasksCommandOperations
         }
         else
         {
-            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true);
-
-            await Task.WhenAll(tasks.Values);
+            await Task.WhenAll(tasksByRepo.Values);
 
             Console.SetCursorPosition(0, cursorTop);
         }
@@ -450,7 +455,7 @@ public static class GitTasksCommandOperations
             }
             else
             {
-                var currentBranchExecResult = _git.GetCurrentBranch(path, context.CancellationToken);
+                var currentBranchExecResult = _git.GetCurrentBranch(repo.Path, context.CancellationToken);
                 if (!currentBranchExecResult.Success)
                 {
                     ConsoleOutput.ClearHeaderDynamicallyActivity(repo, resetPosition: true);
@@ -507,7 +512,11 @@ public static class GitTasksCommandOperations
         var showPendingChanges = context.HasSwitch(GitTasksArguments.PendingChangesSwitch.Name);
         var asynchronously = !(showFullStatus || showPendingChanges);
 
-        var tasks = repositoriesExecResults.Where(r => r.Success).ToDictionary(
+        int cursorTop = asynchronously
+            ? ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true)
+            : -1;
+
+        var tasksByRepo = repositoriesExecResults.Where(r => r.Success).ToDictionary(
             er => er.Value!,
             er => Task.Run(() =>
             {
@@ -542,7 +551,7 @@ public static class GitTasksCommandOperations
 
                 if (!repoExecResult.Success || repo is null) continue;
 
-                var task = tasks[repo];
+                var task = tasksByRepo[repo];
                 if (!task.IsCompleted) await task;
 
                 ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: false);
@@ -566,9 +575,7 @@ public static class GitTasksCommandOperations
         }
         else
         {
-            var cursorTop = ConsoleOutput.WriteHeadersRepositories(repositoriesExecResults, withActivity: true);
-
-            await Task.WhenAll(tasks.Values);
+            await Task.WhenAll(tasksByRepo.Values);
 
             Console.SetCursorPosition(0, cursorTop);
         }

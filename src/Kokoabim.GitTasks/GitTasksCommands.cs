@@ -54,7 +54,7 @@ public static class GitTasksCommands
             GitTasksArguments.PathArgument,
             GitTasksArguments.ShowGitOutputSwitch
         ],
-        syncFunction: GitTasksCommandOperations.FixReference
+        asyncFunction: GitTasksCommandOperations.FixReferenceAsync
     );
 
     private static ConsoleCommand LogCommand() => new(

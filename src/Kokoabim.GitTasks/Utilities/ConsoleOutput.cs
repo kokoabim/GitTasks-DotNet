@@ -194,11 +194,11 @@ public static class ConsoleOutput
         }
     }
 
-    public static void WriteHeaderDynamicallyActivity(GitRepository repository)
+    public static void WriteHeaderDynamicallyActivity(GitRepository repository, bool doNotSetPosition = false)
     {
         lock (_positionLock)
         {
-            Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
+            if (!doNotSetPosition) Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
             WriteLight(" ...");
         }
     }
@@ -273,6 +273,7 @@ public static class ConsoleOutput
         string message;
         if (output.Contains("already up to date", StringComparison.OrdinalIgnoreCase)) message = "up to date";
         else if (output.Contains("CONFLICT ") || output.Contains("merge conflict", StringComparison.OrdinalIgnoreCase)) { message = "conflict"; hasError = true; }
+        else if (output.Contains("divergent branches", StringComparison.OrdinalIgnoreCase)) { message = "divergent branches"; hasError = true; }
         else if (output.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase)) { message = "local changes would be overwritten"; hasError = true; }
         else if (output.Contains("no tracking information for the current branch", StringComparison.OrdinalIgnoreCase)) { message = "no tracking information"; hasError = true; }
         else if (output.Contains("no such ref was fetched", StringComparison.OrdinalIgnoreCase)) { message = "no remote"; hasError = true; }
@@ -349,7 +350,7 @@ public static class ConsoleOutput
             repo.ConsolePosition.Left += message.Length;
         }
 
-        if (withActivity) WriteHeaderDynamicallyActivity(repo);
+        if (withActivity) WriteHeaderDynamicallyActivity(repo, doNotSetPosition: newline);
 
         if (newline) Console.WriteLine();
     }
