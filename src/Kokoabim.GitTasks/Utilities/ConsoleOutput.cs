@@ -77,6 +77,7 @@ public static class ConsoleOutput
             didSwitch = true;
         }
         else if (output.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase)) { message = "local changes would be overwritten"; hasError = true; }
+        else if (output.Contains("permission denied", StringComparison.OrdinalIgnoreCase)) { message = "permission denied"; hasError = true; }
         else if (output.Contains("did not match", StringComparison.OrdinalIgnoreCase)) { message = "no match"; hasError = true; }
         else if (output.Contains("not a symbolic ref", StringComparison.OrdinalIgnoreCase)) { message = "not a symbolic ref (use fix-ref to fix)"; hasError = true; }
         else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
@@ -274,6 +275,7 @@ public static class ConsoleOutput
         if (output.Contains("already up to date", StringComparison.OrdinalIgnoreCase)) message = "up to date";
         else if (output.Contains("CONFLICT ") || output.Contains("merge conflict", StringComparison.OrdinalIgnoreCase)) { message = "conflict"; hasError = true; }
         else if (output.Contains("divergent branches", StringComparison.OrdinalIgnoreCase)) { message = "divergent branches"; hasError = true; }
+        else if (output.Contains("permission denied", StringComparison.OrdinalIgnoreCase)) { message = "permission denied"; hasError = true; }
         else if (output.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase)) { message = "local changes would be overwritten"; hasError = true; }
         else if (output.Contains("no tracking information for the current branch", StringComparison.OrdinalIgnoreCase)) { message = "no tracking information"; hasError = true; }
         else if (output.Contains("no such ref was fetched", StringComparison.OrdinalIgnoreCase)) { message = "no remote"; hasError = true; }
