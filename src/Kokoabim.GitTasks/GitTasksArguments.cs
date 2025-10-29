@@ -20,13 +20,6 @@ public static class GitTasksArguments
         helpText: "Create and switch to a new branch"
     );
 
-    public static ConsoleArgument MainPullSwitch => new(
-        type: ArgumentType.Switch,
-        identifier: "p",
-        name: "pull",
-        helpText: "Pull changes from remote"
-    );
-
     public static ConsoleArgument CleanDryRunSwitch => new(
             type: ArgumentType.Switch,
             identifier: "n",
@@ -141,7 +134,7 @@ public static class GitTasksArguments
 
     public static ConsoleArgument LogDoNotIncludeAllSwitch => new(
         type: ArgumentType.Switch,
-        identifier: "l",
+        identifier: "e",
         name: "not-all",
         helpText: "Do not include all refs (default: include all refs)"
     );
@@ -158,6 +151,13 @@ public static class GitTasksArguments
         identifier: "g",
         name: "merges",
         helpText: "Include merge commits"
+    );
+
+    public static ConsoleArgument LogListFilesSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "l",
+        name: "list-files",
+        helpText: "List files changed in each commit"
     );
 
     public static ConsoleArgument LogMergesOnlySwitch => new(
@@ -187,6 +187,13 @@ public static class GitTasksArguments
         identifier: "s",
         name: "subject-only",
         helpText: "Show only commit subjects"
+    );
+
+    public static ConsoleArgument MainPullSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "p",
+        name: "pull",
+        helpText: "Pull changes from remote"
     );
 
     public static ConsoleArgument MoveBackOption => new(

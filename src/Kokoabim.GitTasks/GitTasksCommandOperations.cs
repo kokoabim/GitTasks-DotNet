@@ -394,7 +394,7 @@ public static class GitTasksCommandOperations
             return 1;
         }
 
-        Console.WriteLine($"Set submodule ignore option to '{ignoreOption.Value}'.");
+        Console.WriteLine($"Set submodule ignore option to '{ignoreOption.Value}'");
         return 0;
     }
 
@@ -403,24 +403,28 @@ public static class GitTasksCommandOperations
         if (!TryGetRepositories(context, out ExecuteResult<GitRepository>[] repositoriesExecResults)) return 1;
 
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(GitTasksArguments.PathArgument.Name) ?? ".");
-        var subjectOnly = context.HasSwitch(GitTasksArguments.LogSubjectOnlySwitch.Name);
 
         var gitLogSettings = new GitLogSettings(context);
 
-        var doNotCompactMessages = context.HasSwitch(GitTasksArguments.LogDoNotCompactMessageSwitch.Name);
         var doNotFetch = context.HasSwitch(GitTasksArguments.LogDoNotFetchSwitch.Name);
 
         var branchMatcher = !string.IsNullOrWhiteSpace(gitLogSettings.BranchPattern)
             ? new Regex($"^{Regex.Escape(gitLogSettings.BranchPattern).Replace("\\*", ".*")}$", RegexOptions.IgnoreCase)
             : null;
 
+        var userSettings = UserSettings.TryLoad(out UserSettings? loadedUserSettings)
+            ? loadedUserSettings
+            : null;
+
+        List<GitLogEntry> allLogEntries = new();
+
         foreach (var repoExecResult in repositoriesExecResults)
         {
             if (!repoExecResult.Success) continue;
             var repo = repoExecResult.Value;
 
-            ConsoleOutput.WriteNormal(repo.RelativePath, false);
-            repo.ConsolePosition.Left = repo.RelativePath.Length;
+            ConsoleOutput.WriteNormal(repo.NameAndRelativePath, false);
+            repo.ConsolePosition.Left = repo.NameAndRelativePath.Length;
             repo.ConsolePosition.Top = Console.CursorTop;
             ConsoleOutput.WriteHeaderDynamicallyActivity(repo);
 
@@ -430,7 +434,7 @@ public static class GitTasksCommandOperations
                 if (!branchesExecResult.Success)
                 {
                     ConsoleOutput.ClearHeaderDynamicallyActivity(repo, resetPosition: true);
-                    ConsoleOutput.WriteRedAndLight(" Failed to get branches ", branchesExecResult.ToString(), true);
+                    ConsoleOutput.WriteRedAndLight(" failed to get branches ", branchesExecResult.ToString(), true);
                     continue;
                 }
 
@@ -441,13 +445,13 @@ public static class GitTasksCommandOperations
                 if (matchingBranches.Length == 0)
                 {
                     ConsoleOutput.ClearHeaderDynamicallyActivity(repo, resetPosition: true);
-                    ConsoleOutput.WriteYellowAndLight(" No matching branches found ", $"No branches matching pattern '{gitLogSettings.BranchPattern}' were found.", true);
+                    ConsoleOutput.WriteYellowAndLight(" no matching branches found ", $"no branches matching pattern '{gitLogSettings.BranchPattern}' were found", true);
                     continue;
                 }
                 else if (matchingBranches.Length > 1)
                 {
                     ConsoleOutput.ClearHeaderDynamicallyActivity(repo, resetPosition: true);
-                    ConsoleOutput.WriteYellowAndLight(" Multiple matching branches found ", $"Branches matching pattern '{gitLogSettings.BranchPattern}': {string.Join(", ", matchingBranches)}. Specify a more specific pattern or the full branch name.", true);
+                    ConsoleOutput.WriteYellowAndLight(" multiple matching branches found ", $"branches matching pattern '{gitLogSettings.BranchPattern}': {string.Join(", ", matchingBranches)} • specify a more specific pattern or the full branch name", true);
                     continue;
                 }
 
@@ -459,7 +463,7 @@ public static class GitTasksCommandOperations
                 if (!currentBranchExecResult.Success)
                 {
                     ConsoleOutput.ClearHeaderDynamicallyActivity(repo, resetPosition: true);
-                    ConsoleOutput.WriteRedAndLight(" Failed to get current branch ", currentBranchExecResult.ToString(), true);
+                    ConsoleOutput.WriteRedAndLight(" failed to get current branch ", currentBranchExecResult.ToString(), true);
                     continue;
                 }
 
@@ -472,7 +476,7 @@ public static class GitTasksCommandOperations
                 if (!fetchExecResult.Success)
                 {
                     ConsoleOutput.ClearHeaderDynamicallyActivity(repo, resetPosition: true);
-                    ConsoleOutput.WriteRedAndLight(" Failed to fetch ", fetchExecResult.ToString(), true);
+                    ConsoleOutput.WriteRedAndLight(" failed to fetch ", fetchExecResult.ToString(), true);
                     continue;
                 }
             }
@@ -485,19 +489,32 @@ public static class GitTasksCommandOperations
 
             if (!logExecResult.Success)
             {
-                ConsoleOutput.WriteRedAndLight(" Failed to get log ", logExecResult.ToString(), true);
+                ConsoleOutput.WriteRedAndLight(" failed to get log ", logExecResult.ToString(), true);
                 continue;
             }
 
             var logEntries = logExecResult.Value;
             if (logEntries.Length == 0)
             {
-                ConsoleOutput.WriteYellowAndLight(" No log entries found ", "No log entries matched the specified criteria.", true);
+                ConsoleOutput.WriteYellowAndLight(" no log entries found ", "no log entries matched the specified criteria", true);
                 continue;
             }
 
+            userSettings?.ChangeAuthorNames(logEntries);
+            userSettings?.LinkAuthorEmails(logEntries);
+
             Console.WriteLine();
-            ConsoleOutput.WriteLogEntries(logEntries, subjectOnly: subjectOnly, doNotCompactMessages: doNotCompactMessages);
+            ConsoleOutput.WriteLogEntries(repo, gitLogSettings, logEntries);
+
+            allLogEntries.AddRange(logEntries);
+        }
+
+        if (repositoriesExecResults.Length > 1 && allLogEntries.Count > 0)
+        {
+            var repoAuthorStats = GitRepositoryAuthorStats.ToDictionary(allLogEntries);
+
+            Console.WriteLine();
+            ConsoleOutput.WriteRepositoryAuthorStats(gitLogSettings, repoAuthorStats);
         }
 
         return 0;
@@ -605,7 +622,7 @@ public static class GitTasksCommandOperations
 
             if (repo.Results.Status.Output != string.Empty)
             {
-                ConsoleOutput.WriteYellow("Repository has uncommitted changes.", newline: true);
+                ConsoleOutput.WriteYellow("Repository has uncommitted changes", newline: true);
                 return 1;
             }
         }
@@ -620,14 +637,14 @@ public static class GitTasksCommandOperations
         var submodules = gitModulesFileExecResult.Value.Submodules;
         if (!submodules.Any())
         {
-            ConsoleOutput.WriteYellow("No submodules found in repository.", newline: true);
+            ConsoleOutput.WriteYellow("No submodules found in repository", newline: true);
             return 0;
         }
 
         var groupedByIgnore = submodules.GroupBy(s => s.Ignore);
         if (groupedByIgnore.Count() > 1)
         {
-            ConsoleOutput.WriteYellowAndLight("Submodules have different ignore options. ", "Use 'submodule-set-ignore' command to set all submodules to the same ignore option.", newline: true);
+            ConsoleOutput.WriteYellowAndLight("Submodules have different ignore options ", "Use 'submodule-set-ignore' command to set all submodules to the same ignore option", newline: true);
             return 1;
         }
 
@@ -671,7 +688,7 @@ public static class GitTasksCommandOperations
 
             if (submodulesWithNewCommits.Length == 0)
             {
-                ConsoleOutput.WriteYellow("No new commits found in submodules.", newline: true);
+                ConsoleOutput.WriteYellow("No new commits found in submodules", newline: true);
                 return 0;
             }
 
@@ -702,7 +719,7 @@ public static class GitTasksCommandOperations
             else if (showGitOutput && !string.IsNullOrWhiteSpace(repo.Results.Commit.Output))
                 ConsoleOutput.WriteLight($"COMMIT:{Environment.NewLine}" + repo.Results.Commit.Output, newline: true);
 
-            ConsoleOutput.WriteGreen("Committed submodule updates.", newline: true);
+            ConsoleOutput.WriteGreen("Committed submodule updates", newline: true);
 
             if (!pushChanges) return 0;
 
@@ -715,7 +732,7 @@ public static class GitTasksCommandOperations
             else if (showGitOutput && !string.IsNullOrWhiteSpace(repo.Results.Push.Output))
                 ConsoleOutput.WriteLight($"PUSH:{Environment.NewLine}" + repo.Results.Push.Output, newline: true);
 
-            ConsoleOutput.WriteGreen("Pushed submodule updates to remote.", newline: true);
+            ConsoleOutput.WriteGreen("Pushed submodule updates to remote", newline: true);
 
             return 0;
         }
@@ -731,11 +748,11 @@ public static class GitTasksCommandOperations
         }
     }
 
-    private static bool TryGetRepositories(ConsoleContext context, out ExecuteResult<GitRepository>[] repositoriesExecResults)
+    private static bool TryGetRepositories(ConsoleContext context, out ExecuteResult<GitRepository>[] repositoriesExecResults, string? remoteName = null)
     {
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(GitTasksArguments.PathArgument.Name) ?? ".");
 
-        repositoriesExecResults = _git.GetRepositories(path, context.CancellationToken);
+        repositoriesExecResults = _git.GetRepositories(path, remoteName, context.CancellationToken);
         if (repositoriesExecResults.Length == 0)
         {
             Console.WriteLine($"No git repositories found: {path}");
@@ -745,13 +762,13 @@ public static class GitTasksCommandOperations
         return true;
     }
 
-    private static bool TryGetRepository(ConsoleContext context, [NotNullWhen(true)] out GitRepository? repository)
+    private static bool TryGetRepository(ConsoleContext context, [NotNullWhen(true)] out GitRepository? repository, string? remoteName = null)
     {
         repository = null;
 
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(GitTasksArguments.PathArgument.Name) ?? ".");
 
-        var repositoryExecResult = _git.GetRepository(path, context.CancellationToken);
+        var repositoryExecResult = _git.GetRepository(path, remoteName, context.CancellationToken);
         if (!repositoryExecResult.Success || repositoryExecResult.Value.Success is false)
         {
             Console.WriteLine(repositoryExecResult.Value?.Error ?? repositoryExecResult.Output ?? $"No git repository found: {path}");

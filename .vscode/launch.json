@@ -13,7 +13,7 @@
             "logging": {
                 "moduleLoad": false
             },
-            "console": "integratedTerminal"
+            "console": "externalTerminal"
         }
     ]
 }

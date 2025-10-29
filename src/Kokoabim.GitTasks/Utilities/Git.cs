@@ -2,8 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace Kokoabim.GitTasks;
 
-#pragma warning disable CA1822 // Mark members as static
-
 public class Git
 {
     private const string _gitLogFormat = "AuthorDate=%ad%nAuthorName=%an%nAuthorEmail=%ae%nCommitDate=%cd%nCommitterName=%cn%nDecorations=%d%nHash=%H%nMessageBody=%B%nMessageSubject=%s%nParentHashes=%P%nNumStats=";
@@ -154,9 +152,9 @@ public class Git
 
     public ExecuteResult<GitLogEntry[]> GetLog(GitLogSettings settings, CancellationToken cancellationToken = default)
     {
-        var repoUrlExecResult = RepositoryName(settings.Path!, settings.RemoteName!, cancellationToken);
-        if (!repoUrlExecResult.Success) return repoUrlExecResult.WithValue<GitLogEntry[]>([], settings.Path);
-        var repoName = repoUrlExecResult.Value;
+        var repoNameExecResult = RepositoryName(settings.Path!, settings.RemoteName!, cancellationToken);
+        if (!repoNameExecResult.Success) return repoNameExecResult.WithValue<GitLogEntry[]>([], settings.Path);
+        var repoName = repoNameExecResult.Value;
 
         var args = $"--no-pager log --numstat --date=iso --pretty=format:\"{_gitLogFormat}\"";
         if (settings.AfterRelativeDate is not null) args += $" --after=\"{settings.AfterRelativeDate}\"";
@@ -223,28 +221,28 @@ public class Git
         return ExecuteResult.CreateWithObject(distinctOrderedLogEntries, settings.Path);
     }
 
-    public ExecuteResult<GitRepository>[] GetRepositories(string path, CancellationToken cancellationToken = default)
+    public ExecuteResult<GitRepository>[] GetRepositories(string path, string? remoteName = null, CancellationToken cancellationToken = default)
     {
         var results = new List<ExecuteResult<GitRepository>>();
-        results.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepository(d, isSubmodule: false, cancellationToken)));
-        results.AddRange(GetSubmoduleDirectories(path, cancellationToken).Select(d => GetRepository(d, isSubmodule: true, cancellationToken)));
+        results.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepository(d, isSubmodule: false, remoteName: remoteName, cancellationToken: cancellationToken)));
+        results.AddRange(GetSubmoduleDirectories(path, cancellationToken).Select(d => GetRepository(d, isSubmodule: true, remoteName: remoteName, cancellationToken: cancellationToken)));
 
         return [.. results.OrderBy(r => r.Value!.Path).ForEach(r => r.Value!.SetRelativePath(path))];
     }
 
-    public async Task<ExecuteResult<GitRepository>[]> GetRepositoriesAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult<GitRepository>[]> GetRepositoriesAsync(string path, string? remoteName = null, CancellationToken cancellationToken = default)
     {
         var tasks = new List<Task<ExecuteResult<GitRepository>>>();
-        tasks.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepositoryAsync(d, isSubmodule: false, cancellationToken)));
-        tasks.AddRange((await GetSubmoduleDirectoriesAsync(path, cancellationToken)).Select(d => GetRepositoryAsync(d, isSubmodule: true, cancellationToken)));
+        tasks.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepositoryAsync(d, isSubmodule: false, remoteName: remoteName, cancellationToken: cancellationToken)));
+        tasks.AddRange((await GetSubmoduleDirectoriesAsync(path, cancellationToken)).Select(d => GetRepositoryAsync(d, isSubmodule: true, remoteName: remoteName, cancellationToken: cancellationToken)));
         var results = await Task.WhenAll(tasks);
 
         return [.. results.OrderBy(r => r.Value!.Path).ForEach(r => r.Value!.SetRelativePath(path))];
     }
 
-    public ExecuteResult<GitRepository?> GetRepository(string path, CancellationToken cancellationToken = default) =>
+    public ExecuteResult<GitRepository?> GetRepository(string path, string? remoteName = null, CancellationToken cancellationToken = default) =>
         _fileSystem.IsGitDirectory(path)
-            ? GetRepository(path, isSubmodule: false, cancellationToken).AsNullable()
+            ? GetRepository(path, isSubmodule: false, remoteName: remoteName, cancellationToken: cancellationToken).AsNullable()
             : new ExecuteResult<GitRepository?> { ExitCode = 1, Output = "Not a git repository", Reference = path };
 
     public ExecuteResult GetStatus(string path, bool porcelain = false, CancellationToken cancellationToken = default) =>
@@ -289,6 +287,14 @@ public class Git
 
     public ExecuteResult Push(string path, CancellationToken cancellationToken = default) =>
         _executor.Execute("git", "push", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+
+    public ExecuteResult<string> RemoteName(string path, CancellationToken cancellationToken = default)
+    {
+        var execResult = _executor.Execute("git", "remote", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+        return execResult.Success
+            ? execResult.WithValue(execResult.Output.Trim())
+            : execResult.WithNull<string>();
+    }
 
     public ExecuteResult<string> RepositoryName(string path, string remote = "origin", CancellationToken cancellationToken = default)
     {
@@ -411,37 +417,53 @@ public class Git
 
     private static string CreateStatusArgs(bool porcelain) => porcelain ? "status --porcelain" : "status";
 
-    private ExecuteResult<GitRepository> GetRepository(string path, bool isSubmodule, CancellationToken cancellationToken = default)
+    private ExecuteResult<GitRepository> GetRepository(string path, bool isSubmodule, string? remoteName = null, CancellationToken cancellationToken = default)
     {
         var defaultBranchExecResult = GetDefaultBranch(path, cancellationToken);
         var currentBranchExecResult = GetCurrentBranch(path, cancellationToken);
 
-        return ExecuteResult.CreateWithObject(new GitRepository()
+        var remoteNameExecResult = remoteName is null ? RemoteName(path, cancellationToken) : null;
+        if (remoteNameExecResult?.Success == true) remoteName = remoteNameExecResult.Value;
+        var repoNameExecResult = remoteName is not null ? RepositoryName(path, remoteName, cancellationToken) : null;
+
+        return ExecuteResult.CreateWithObject(new GitRepository(repoNameExecResult?.Value ?? "", path)
         {
-            Error = new string?[] { currentBranchExecResult.Success ? null : currentBranchExecResult.Output, defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output }.CombineNonNull("; "),
+            Error = new string?[] {
+                currentBranchExecResult.Success ? null : currentBranchExecResult.Output,
+                defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output,
+                remoteNameExecResult?.Success == true ? null : remoteNameExecResult!.Output,
+                repoNameExecResult?.Success == true ? null : repoNameExecResult!.Output
+            }.CombineNonNull("; "),
             CurrentBranch = currentBranchExecResult.Value,
             DefaultBranch = defaultBranchExecResult.Value,
             IsSubmodule = isSubmodule,
-            Path = path
         }, path);
+
     }
 
-    private async Task<ExecuteResult<GitRepository>> GetRepositoryAsync(string path, bool isSubmodule, CancellationToken cancellationToken = default)
-    {
-        var defaultBranchExecResult = await GetDefaultBranchAsync(path, cancellationToken);
-        var currentBranchExecResult = await GetCurrentBranchAsync(path, cancellationToken);
-
-        return ExecuteResult.CreateWithObject(new GitRepository()
+    private Task<ExecuteResult<GitRepository>> GetRepositoryAsync(string path, bool isSubmodule, string? remoteName = null, CancellationToken cancellationToken = default) =>
+        Task.Run(() =>
         {
-            Error = new string?[] { currentBranchExecResult.Success ? null : currentBranchExecResult.Output, defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output }.CombineNonNull("; "),
-            CurrentBranch = currentBranchExecResult.Value,
-            DefaultBranch = defaultBranchExecResult.Value,
-            IsSubmodule = isSubmodule,
-            Path = path
-        }, path);
-    }
+            var defaultBranchExecResult = GetDefaultBranch(path, cancellationToken);
+            var currentBranchExecResult = GetCurrentBranch(path, cancellationToken);
+
+            var remoteNameExecResult = remoteName is null ? RemoteName(path, cancellationToken) : null;
+            if (remoteNameExecResult?.Success == true) remoteName = remoteNameExecResult.Value;
+            var repoNameExecResult = remoteName is not null ? RepositoryName(path, remoteName, cancellationToken) : null;
+
+            return ExecuteResult.CreateWithObject(new GitRepository(repoNameExecResult?.Value ?? "", path)
+            {
+                Error = new string?[] {
+                currentBranchExecResult.Success ? null : currentBranchExecResult.Output,
+                defaultBranchExecResult.Success ? null : defaultBranchExecResult.Output,
+                remoteNameExecResult?.Success == true ? null : remoteNameExecResult!.Output,
+                repoNameExecResult?.Success == true ? null : repoNameExecResult!.Output
+            }.CombineNonNull("; "),
+                CurrentBranch = currentBranchExecResult.Value,
+                DefaultBranch = defaultBranchExecResult.Value,
+                IsSubmodule = isSubmodule,
+            }, path);
+        });
 
     #endregion 
 }
-
-#pragma warning restore CA1822 // Mark members as static

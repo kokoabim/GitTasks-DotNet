@@ -1,6 +1,6 @@
-namespace Kokoabim.GitTasks;
+using System.Text.Json;
 
-#pragma warning disable CA1822 // Mark members as static
+namespace Kokoabim.GitTasks;
 
 public class FileSystem
 {
@@ -22,6 +22,8 @@ public class FileSystem
         return [.. directories];
     }
 
+    public string GetUserHomePath() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
     public bool IsGitDirectory(string path)
     {
         path = GetFullPath(path);
@@ -35,6 +37,14 @@ public class FileSystem
 
         try { return File.ReadAllText(path); }
         catch { return null; }
+    }
+
+    public T? ReadFile<T>(string path, string? fileName = null)
+    {
+        if (fileName != null) path = Path.Combine(path, fileName);
+
+        try { return JsonSerializer.Deserialize<T>(File.ReadAllText(path)); }
+        catch { return default; }
     }
 
     public async Task<string?> ReadFileAsync(string path, string? fileName = null)
@@ -53,5 +63,3 @@ public class FileSystem
         if (depth > 0) foreach (var d in Directory.GetDirectories(path)) GetGitDirectories(directories, d, depth - 1);
     }
 }
-
-#pragma warning restore CA1822 // Mark members as static

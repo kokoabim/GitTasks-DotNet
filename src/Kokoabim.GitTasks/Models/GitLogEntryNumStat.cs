@@ -5,11 +5,12 @@ public class GitLogEntryNumStat
     public int AddedLines { get; set; }
     public int DeletedLines { get; set; }
     public string FilePath { get; set; }
+    public string? PreviousFilePath { get; set; }
+    public bool IsBinaryFile { get; set; }
 
-    public GitLogEntryNumStat(int addedLines, int deletedLines, string filePath)
+    public GitLogEntryNumStat(string filePath, string? previousFilePath = null)
     {
-        AddedLines = addedLines;
-        DeletedLines = deletedLines;
         FilePath = filePath;
+        PreviousFilePath = previousFilePath;
     }
 }

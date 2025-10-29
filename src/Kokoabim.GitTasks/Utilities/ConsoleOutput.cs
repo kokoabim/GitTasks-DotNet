@@ -247,7 +247,7 @@ public static class ConsoleOutput
         else if (matchingBranches.Length > 1)
         {
             message = " multiple matches ";
-            branches = string.Join(", ", matchingBranches.Select(b => b.Name));
+            branches = string.Join(", ", matchingBranches.Select(static b => b.Name));
         }
 
         lock (_positionLock)
@@ -315,8 +315,8 @@ public static class ConsoleOutput
 
         var repo = repositoryExecResult.Value!;
 
-        WriteNormal(repo.RelativePath);
-        repo.ConsolePosition.Left += repo.RelativePath.Length;
+        WriteNormal(repo.NameAndRelativePath);
+        repo.ConsolePosition.Left += repo.NameAndRelativePath.Length;
 
         if (repo.CurrentBranch is not null)
         {
@@ -452,15 +452,20 @@ public static class ConsoleOutput
         else Console.Write($"\x1b[2m{text}\x1b[0m");
     }
 
-    public static void WriteLogEntries(GitLogEntry[] logEntries, bool subjectOnly = false, bool doNotCompactMessages = false)
+    public static void WriteLogEntries(GitRepository repo, GitLogSettings gitLogSettings, GitLogEntry[] logEntries)
     {
+        int longestAddedLinesLength;
+        int longestDeletedLinesLength;
+
         var lastIndex = logEntries.Length - 1;
         for (int i = 0; i < logEntries.Length; i++)
         {
             var entry = logEntries[i];
 
             WriteYellow(entry.Hash.Abbreviated);
+            if (entry.IsMerge) WriteNormal(" 🔀");
             WriteBold($" {entry.AuthorName}");
+            WriteLight($" {entry.AuthorEmail}");
             if (entry.AuthorName != entry.CommitterName) WriteLight($" ({entry.CommitterName})");
             WriteLight(" @");
             WriteNormal($" {entry.AuthorDate:M/d/yy h:mm tt}");
@@ -475,19 +480,43 @@ public static class ConsoleOutput
                     entry.Repository,
                     entry.Branch,
                     entry.Decorations,
-                    string.Join(", ", entry.ParentHashes.Select(h => h.Abbreviated)),
+                    string.Join(", ", entry.ParentHashes.Select(static h => h.Abbreviated)),
                     entry.Approvers.Length > 0 ? string.Join(", ", entry.Approvers) : null
                 }.CombineNonNullOrWhiteSpace(" • ")!,
                 newline: true);
             Console.WriteLine();
 
             WriteBold(entry.MessageSubject, newline: true);
-            if (!subjectOnly && !string.IsNullOrWhiteSpace(entry.MessageBody))
+            if (!gitLogSettings.SubjectOnly && !string.IsNullOrWhiteSpace(entry.MessageBody))
             {
-                if (doNotCompactMessages) Console.WriteLine();
+                if (gitLogSettings.DoNotCompactMessages) Console.WriteLine();
                 WriteNormal(entry.MessageBody, newline: true);
             }
             Console.WriteLine();
+
+            if (gitLogSettings.ListFiles && entry.NumStatsTotals.FilesChanged > 0)
+            {
+                var longestFilePathLength = entry.NumStats.Max(static ns => ns.FilePath.Length);
+                longestAddedLinesLength = entry.NumStats.Max(static ns => ns.AddedLines.ToString().Length) + 2;
+                longestDeletedLinesLength = entry.NumStats.Max(static ns => ns.DeletedLines.ToString().Length + 2);
+
+                foreach (var numStat in entry.NumStats)
+                {
+                    WriteLight(numStat.FilePath.PadRight(longestFilePathLength));
+                    if (!numStat.IsBinaryFile)
+                    {
+                        WriteGreen($"+{numStat.AddedLines}".PadLeft(longestAddedLinesLength));
+                        WriteRed($"-{numStat.DeletedLines}".PadLeft(longestDeletedLinesLength));
+                    }
+                    else WriteLight(" (binary file)");
+
+                    if (numStat.PreviousFilePath is not null) WriteLight($" (from {numStat.PreviousFilePath})");
+
+                    Console.WriteLine();
+                }
+
+                Console.WriteLine();
+            }
 
             if (i < lastIndex)
             {
@@ -496,15 +525,33 @@ public static class ConsoleOutput
             }
         }
 
+        var minDate = logEntries.Min(static e => e.AuthorDate);
+        var maxDate = logEntries.Max(static e => e.AuthorDate);
+        var totalDays = (maxDate - minDate).TotalDays + 1;
+
         WriteLight(_doubleLineDash, newline: true);
+        WriteLight($"Repository: {repo.NameAndRelativePath}", newline: true);
+        WriteLight($"Dates: {minDate:ddd M/d/yy h:mm tt} – {maxDate:ddd M/d/yy h:mm tt} ({totalDays:N0} days)", newline: true);
+        if (!gitLogSettings.IncludeMerges) WriteLight("Excluding merge commits", newline: true);
+        if (gitLogSettings.MergesOnly) WriteLight("Including only merge commits", newline: true);
+        if (gitLogSettings.DoNotIncludeAll) WriteLight("Excluding commits that are in all branches", newline: true);
+        if (gitLogSettings.BranchPattern is not null) WriteLight($"Branch pattern: {gitLogSettings.BranchPattern}", newline: true);
+        if (gitLogSettings.FilePattern is not null) WriteLight($"File pattern: {gitLogSettings.FilePattern}", newline: true);
+        if (gitLogSettings.AuthorName is not null) WriteLight($"Author pattern: {gitLogSettings.AuthorName}", newline: true);
         Console.WriteLine();
 
-        var groupedByAuthor = logEntries.GroupBy(e => e.AuthorEmail.ToLower()).OrderByDescending(g => g.Count()).ToArray();
-        var longestAuthorNameLength = groupedByAuthor.Max(g => g.First().AuthorName.Length);
-        var longestCommitCountLength = groupedByAuthor.Max(g => g.Count().ToString().Length);
-        var longestAddedLinesLength = groupedByAuthor.Max(g => g.Sum(e => e.NumStatsTotals.AddedLines).ToString().Length) + 3;
-        var longestDeletedLinesLength = groupedByAuthor.Max(g => g.Sum(e => e.NumStatsTotals.DeletedLines).ToString().Length) + 3;
-        var longestFilesChangedLength = groupedByAuthor.Max(g => g.Sum(e => e.NumStatsTotals.FilesChanged).ToString().Length);
+        var groupedByAuthor = logEntries.GroupBy(static e => e.AuthorEmail.ToLower())
+            .OrderByDescending(static g => g.Count(le => !le.IsMerge))
+            .ThenByDescending(static g => g.Count(le => le.IsMerge))
+            .ToArray();
+
+        // var longestAuthorLength = groupedByAuthor.Max(static g => g.First().AuthorName.Length + g.First().AuthorEmail.Length + 1);
+        var longestAuthorLength = groupedByAuthor.Max(static g => g.First().AuthorName.Length);
+        var longestMergeCountLength = groupedByAuthor.Max(static g => g.Count(le => le.IsMerge).ToString().Length) + 2;
+        var longestCommitCountLength = groupedByAuthor.Max(static g => g.Count(le => !le.IsMerge).ToString().Length) + 2;
+        var longestFilesChangedLength = groupedByAuthor.Max(static g => g.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.FilesChanged).ToString().Length) + 2;
+        longestAddedLinesLength = groupedByAuthor.Max(static g => g.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.AddedLines).ToString().Length) + 3;
+        longestDeletedLinesLength = groupedByAuthor.Max(static g => g.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.DeletedLines).ToString().Length) + 3;
 
         var maxLineLength = 0;
         for (int i = 0; i < groupedByAuthor.Length; i++)
@@ -512,32 +559,43 @@ public static class ConsoleOutput
             var authorGroup = groupedByAuthor[i];
 
             var authorName = authorGroup.First().AuthorName;
-            var commitCount = authorGroup.Count();
-            var addedLines = authorGroup.Sum(e => e.NumStatsTotals.AddedLines);
-            var deletedLines = authorGroup.Sum(e => e.NumStatsTotals.DeletedLines);
-            var filesChanged = authorGroup.Sum(e => e.NumStatsTotals.FilesChanged);
+            var authorEmail = authorGroup.First().AuthorEmail;
+            var mergeCount = authorGroup.Count(le => le.IsMerge);
+            var commitCount = authorGroup.Count(le => !le.IsMerge);
+            var filesChanged = authorGroup.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.FilesChanged);
+            var addedLines = authorGroup.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.AddedLines);
+            var deletedLines = authorGroup.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.DeletedLines);
 
-            WriteBold(authorName.PadRight(longestAuthorNameLength));
-            WriteNormal($"  {commitCount.ToString().PadLeft(longestCommitCountLength)} commit{(commitCount == 1 ? "" : "s"),-1}");
-            WriteNormal($"  {filesChanged.ToString().PadLeft(longestFilesChangedLength)} file{(filesChanged == 1 ? "" : "s"),-1}");
-            WriteGreen($"  +{addedLines}".PadLeft(longestAddedLinesLength));
-            WriteRed($"  -{deletedLines}".PadLeft(longestDeletedLinesLength));
+            // WriteBold(authorName);
+            // WriteLight($" {authorEmail}".PadRight(longestAuthorLength - authorName.Length));
+            WriteBold(authorName.PadRight(longestAuthorLength));
+            WriteNormal($"{mergeCount.ToString().PadLeft(longestMergeCountLength)} merge{(mergeCount == 1 ? "" : "s"),-1}");
+            WriteNormal($"{commitCount.ToString().PadLeft(longestCommitCountLength)} commit{(commitCount == 1 ? "" : "s"),-1}");
+            WriteNormal($"{filesChanged.ToString().PadLeft(longestFilesChangedLength)} file{(filesChanged == 1 ? "" : "s"),-1}");
+            WriteGreen($"+{addedLines}".PadLeft(longestAddedLinesLength));
+            WriteRed($"-{deletedLines}".PadLeft(longestDeletedLinesLength));
 
             if (Console.CursorLeft > maxLineLength) maxLineLength = Console.CursorLeft;
             Console.WriteLine();
         }
 
+        var authorTotalLength = groupedByAuthor.Length.ToString().Length;
+
         if (logEntries.Length > 1)
         {
+            var totalMerges = logEntries.Count(le => le.IsMerge);
+            var totalCommits = logEntries.Count(le => !le.IsMerge);
+            var totalFilesChanged = logEntries.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.FilesChanged);
+            var totalAddedLines = logEntries.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.AddedLines);
+            var totalDeletedLines = logEntries.Where(le => !le.IsMerge).Sum(static e => e.NumStatsTotals.DeletedLines);
+
             WriteLight(new string('-', maxLineLength), newline: true);
-            var totalCommits = logEntries.Length;
-            var totalAddedLines = logEntries.Sum(e => e.NumStatsTotals.AddedLines);
-            var totalDeletedLines = logEntries.Sum(e => e.NumStatsTotals.DeletedLines);
-            var totalFilesChanged = logEntries.Sum(e => e.NumStatsTotals.FilesChanged);
-            WriteNormal(groupedByAuthor.Count().ToString().PadRight(longestAuthorNameLength));
-            WriteNormal(totalCommits.ToString().PadLeft(longestCommitCountLength + 2));
-            WriteNormal(totalFilesChanged.ToString().PadLeft(longestFilesChangedLength + 10));
-            WriteGreen($"+{totalAddedLines}".PadLeft(longestAddedLinesLength + 6));
+
+            WriteNormal(groupedByAuthor.Length.ToString());
+            WriteNormal(totalMerges.ToString().PadLeft(longestAuthorLength - authorTotalLength + longestMergeCountLength)); // " merge(s)"
+            WriteNormal(totalCommits.ToString().PadLeft(longestCommitCountLength + 7)); // " commit(s)"
+            WriteNormal(totalFilesChanged.ToString().PadLeft(longestFilesChangedLength + 8)); // " file(s)"
+            WriteGreen($"+{totalAddedLines}".PadLeft(longestAddedLinesLength + 6)); // "+<num>"
             WriteRed($"-{totalDeletedLines}".PadLeft(longestDeletedLinesLength));
         }
 
@@ -566,6 +624,87 @@ public static class ConsoleOutput
         Console.ResetColor();
 
         WriteLight(lightText, newline);
+    }
+
+    public static void WriteRepositoryAuthorStats(GitLogSettings gitLogSettings, Dictionary<string, GitRepositoryAuthorStats[]> repoAuthorStats)
+    {
+        var allStats = repoAuthorStats.Values.SelectMany(static e => e).ToArray();
+
+        var minDate = allStats.Min(static e => e.Dates.FromDate);
+        var maxDate = allStats.Max(static e => e.Dates.ToDate);
+        var totalDays = (maxDate - minDate).TotalDays + 1;
+
+        WriteLight(new string('=', 72), true);
+        WriteLight("Combined Repository Totals", true);
+        WriteLight($"Dates: {minDate:ddd M/d/yy h:mm tt} – {maxDate:ddd M/d/yy h:mm tt} ({totalDays:N0} days)", true);
+        if (!gitLogSettings.IncludeMerges) WriteLight("Excluding merge commits", true);
+        if (gitLogSettings.MergesOnly) WriteLight("Including only merge commits", true);
+        if (gitLogSettings.DoNotIncludeAll) WriteLight("Excluding commits that are in all branches", true);
+        if (gitLogSettings.BranchPattern is not null) WriteLight($"Branch pattern: {gitLogSettings.BranchPattern}", true);
+        if (gitLogSettings.FilePattern is not null) WriteLight($"File pattern: {gitLogSettings.FilePattern}", true);
+        if (gitLogSettings.AuthorName is not null) WriteLight($"Author pattern: {gitLogSettings.AuthorName}", true);
+        Console.WriteLine();
+
+        // var longestAuthorLength = repoAuthorStats.Max(static k => k.Value.First().AuthorEmail.Length + k.Value.First().AuthorName.Length) + 1;
+        var longestAuthorLength = repoAuthorStats.Max(static k => k.Value.First().AuthorName.Length);
+        var longestMergeCountLength = allStats.Max(static g => g.MergeCount.ToString().Length) + 2;
+        var longestCommitCountLength = allStats.Max(static g => g.CommitCount.ToString().Length) + 2;
+        var longestFilesChangedLength = allStats.Max(static g => g.FilesChanged.ToString().Length) + 2;
+        var longestAddedLinesLength = allStats.Max(static g => g.AddedLines.ToString().Length) + 3;
+        var longestDeletedLinesLength = allStats.Max(static g => g.DeletedLines.ToString().Length) + 3;
+        var longestRepoCountLength = repoAuthorStats.Max(static k => k.Value.Length.ToString().Length) + 2;
+
+        var maxLineLength = 0;
+        foreach (var kvp in repoAuthorStats.OrderByDescending(static k => k.Value.Sum(static s => s.CommitCount)).ThenByDescending(static k => k.Value.Sum(static s => s.MergeCount)))
+        {
+            var stats = kvp.Value;
+            var authorEmail = stats.First().AuthorEmail;
+            var authorName = stats.First().AuthorName;
+
+            var totalMerges = stats.Sum(static s => s.MergeCount);
+            var totalFilesChanged = stats.Sum(static s => s.FilesChanged);
+            var totalCommits = stats.Sum(static s => s.CommitCount);
+            var totalAddedLines = stats.Sum(static s => s.AddedLines);
+            var totalDeletedLines = stats.Sum(static s => s.DeletedLines);
+            var totalRepos = stats.Length;
+
+            // WriteBold(authorName);
+            // WriteLight($" {authorEmail}".PadRight(longestAuthorLength - authorName.Length));
+            WriteBold(authorName.PadRight(longestAuthorLength));
+            WriteNormal($"{totalMerges.ToString().PadLeft(longestMergeCountLength)} merge{(totalMerges == 1 ? "" : "s"),-1}");
+            WriteNormal($"{totalCommits.ToString().PadLeft(longestCommitCountLength)} commit{(totalCommits == 1 ? "" : "s"),-1}");
+            WriteNormal($"{totalFilesChanged.ToString().PadLeft(longestFilesChangedLength)} file{(totalFilesChanged == 1 ? "" : "s"),-1}");
+            WriteGreen($"+{totalAddedLines}".PadLeft(longestAddedLinesLength));
+            WriteRed($"-{totalDeletedLines}".PadLeft(longestDeletedLinesLength));
+            WriteNormal($"{totalRepos.ToString().PadLeft(longestRepoCountLength)} repo{(totalRepos == 1 ? "" : "s"),-1}");
+
+            if (Console.CursorLeft > maxLineLength) maxLineLength = Console.CursorLeft;
+            Console.WriteLine();
+        }
+
+        var authorTotalLength = repoAuthorStats.Count.ToString().Length;
+
+        if (repoAuthorStats.Count > 1)
+        {
+            var grandTotalCommits = allStats.Sum(static s => s.CommitCount);
+            var grandTotalMerges = allStats.Sum(static s => s.MergeCount);
+            var grandTotalAddedLines = allStats.Sum(static s => s.AddedLines);
+            var grandTotalDeletedLines = allStats.Sum(static s => s.DeletedLines);
+            var grandTotalFilesChanged = allStats.Sum(static s => s.FilesChanged);
+            var grandTotalRepos = allStats.Sum(static s => 1);
+
+            WriteLight(new string('-', maxLineLength), newline: true);
+
+            WriteNormal(repoAuthorStats.Count.ToString());
+            WriteNormal(grandTotalMerges.ToString().PadLeft(longestAuthorLength - authorTotalLength + longestMergeCountLength)); // " merge(s)"
+            WriteNormal(grandTotalCommits.ToString().PadLeft(longestCommitCountLength + 7)); // " commit(s)"
+            WriteNormal(grandTotalFilesChanged.ToString().PadLeft(longestFilesChangedLength + 8)); // " file(s)"
+            WriteGreen($"+{grandTotalAddedLines}".PadLeft(longestAddedLinesLength + 6)); // "+<num>"
+            WriteRed($"-{grandTotalDeletedLines}".PadLeft(longestDeletedLinesLength));
+            WriteNormal(grandTotalRepos.ToString().PadLeft(longestRepoCountLength + 1)); // " repo(s)"
+        }
+
+        Console.WriteLine();
     }
 
     public static void WriteUnderline(string text) => Console.Write($"\x1b[4m{text}\x1b[0m");
