@@ -161,7 +161,7 @@ public class Git
         if (settings.BeforeRelativeDate is not null) args += $" --before=\"{settings.BeforeRelativeDate}\"";
         if (settings.AuthorName is not null) args += $" --author=\"{settings.AuthorName}\"";
         if (!settings.DoNotIncludeAll) args += " --all";
-        if (!settings.IncludeMerges) args += " --no-merges"; else if (settings.MergesOnly) args += " --merges";
+        if (settings.DoNotIncludeMerges) args += " --no-merges"; else if (settings.MergesOnly) args += " --merges";
 
         var gitLogExecResult = _executor.Execute("git", $"{args} {settings.Branch}", workingDirectory: settings.Path, cancellationToken: cancellationToken);
         if (!gitLogExecResult.Success)
@@ -215,7 +215,7 @@ public class Git
         var distinctOrderedLogEntries = entries
             .DistinctBy(le => le.Hash)
             .ForEach(e => { e.Branch = settings.Branch; e.Repository = repoName; })
-            .OrderByDescending(le => le.AuthorDate)
+            .OrderByDescending(le => le.CommitDate)
             .ToArray();
 
         return ExecuteResult.CreateWithObject(distinctOrderedLogEntries, settings.Path);

@@ -32,8 +32,8 @@ public class GitRepositoryAuthorStats
                 var authorName = first.AuthorName;
                 var authorEmail = first.AuthorEmail;
 
-                var minDate = g.Min(e => e.AuthorDate);
-                var maxDate = g.Max(e => e.AuthorDate);
+                var minDate = g.Min(e => e.CommitDate);
+                var maxDate = g.Max(e => e.CommitDate);
                 var dates = new DateRange { FromDate = minDate, ToDate = maxDate };
 
                 var stats = new GitRepositoryAuthorStats(authorName, authorEmail, first.Repository!)

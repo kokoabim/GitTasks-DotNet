@@ -70,7 +70,7 @@ public static class GitTasksCommands
             GitTasksArguments.LogDoNotFetchSwitch,
             GitTasksArguments.LogDoNotIncludeAllSwitch,
             GitTasksArguments.LogFilePatternOption,
-            GitTasksArguments.LogIncludeMergesSwitch,
+            GitTasksArguments.LogDoNotIncludeMergesSwitch,
             GitTasksArguments.LogListFilesSwitch,
             GitTasksArguments.LogMergesOnlySwitch,
             GitTasksArguments.LogMessagePatternOption,

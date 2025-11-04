@@ -525,14 +525,14 @@ public static class ConsoleOutput
             }
         }
 
-        var minDate = logEntries.Min(static e => e.AuthorDate);
-        var maxDate = logEntries.Max(static e => e.AuthorDate);
+        var minDate = logEntries.Min(static e => e.CommitDate);
+        var maxDate = logEntries.Max(static e => e.CommitDate);
         var totalDays = (maxDate - minDate).TotalDays + 1;
 
         WriteLight(_doubleLineDash, newline: true);
         WriteLight($"Repository: {repo.NameAndRelativePath}", newline: true);
         WriteLight($"Dates: {minDate:ddd M/d/yy h:mm tt} – {maxDate:ddd M/d/yy h:mm tt} ({totalDays:N0} days)", newline: true);
-        if (!gitLogSettings.IncludeMerges) WriteLight("Excluding merge commits", newline: true);
+        if (gitLogSettings.DoNotIncludeMerges) WriteLight("Excluding merge commits", newline: true);
         if (gitLogSettings.MergesOnly) WriteLight("Including only merge commits", newline: true);
         if (gitLogSettings.DoNotIncludeAll) WriteLight("Excluding commits that are in all branches", newline: true);
         if (gitLogSettings.BranchPattern is not null) WriteLight($"Branch pattern: {gitLogSettings.BranchPattern}", newline: true);
@@ -541,8 +541,9 @@ public static class ConsoleOutput
         Console.WriteLine();
 
         var groupedByAuthor = logEntries.GroupBy(static e => e.AuthorEmail.ToLower())
-            .OrderByDescending(static g => g.Count(le => !le.IsMerge))
-            .ThenByDescending(static g => g.Count(le => le.IsMerge))
+            .OrderBy(static g => g.Key)
+            // .OrderByDescending(static g => g.Count(le => !le.IsMerge))
+            // .ThenByDescending(static g => g.Count(le => le.IsMerge))
             .ToArray();
 
         // var longestAuthorLength = groupedByAuthor.Max(static g => g.First().AuthorName.Length + g.First().AuthorEmail.Length + 1);
@@ -637,7 +638,7 @@ public static class ConsoleOutput
         WriteLight(new string('=', 72), true);
         WriteLight("Combined Repository Totals", true);
         WriteLight($"Dates: {minDate:ddd M/d/yy h:mm tt} – {maxDate:ddd M/d/yy h:mm tt} ({totalDays:N0} days)", true);
-        if (!gitLogSettings.IncludeMerges) WriteLight("Excluding merge commits", true);
+        if (gitLogSettings.DoNotIncludeMerges) WriteLight("Excluding merge commits", true);
         if (gitLogSettings.MergesOnly) WriteLight("Including only merge commits", true);
         if (gitLogSettings.DoNotIncludeAll) WriteLight("Excluding commits that are in all branches", true);
         if (gitLogSettings.BranchPattern is not null) WriteLight($"Branch pattern: {gitLogSettings.BranchPattern}", true);
@@ -655,7 +656,8 @@ public static class ConsoleOutput
         var longestRepoCountLength = repoAuthorStats.Max(static k => k.Value.Length.ToString().Length) + 2;
 
         var maxLineLength = 0;
-        foreach (var kvp in repoAuthorStats.OrderByDescending(static k => k.Value.Sum(static s => s.CommitCount)).ThenByDescending(static k => k.Value.Sum(static s => s.MergeCount)))
+        // foreach (var kvp in repoAuthorStats.OrderByDescending(static k => k.Value.Sum(static s => s.CommitCount)).ThenByDescending(static k => k.Value.Sum(static s => s.MergeCount)))
+        foreach (var kvp in repoAuthorStats.OrderBy(static k => k.Value.First().AuthorName))
         {
             var stats = kvp.Value;
             var authorEmail = stats.First().AuthorEmail;

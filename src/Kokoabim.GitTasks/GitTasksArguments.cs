@@ -146,11 +146,11 @@ public static class GitTasksArguments
         helpText: "Show commits affecting specific files or paths"
     );
 
-    public static ConsoleArgument LogIncludeMergesSwitch => new(
+    public static ConsoleArgument LogDoNotIncludeMergesSwitch => new(
         type: ArgumentType.Switch,
         identifier: "g",
-        name: "merges",
-        helpText: "Include merge commits"
+        name: "no-merges",
+        helpText: "Do not include merge commits"
     );
 
     public static ConsoleArgument LogListFilesSwitch => new(
