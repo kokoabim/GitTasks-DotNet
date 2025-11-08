@@ -8,21 +8,21 @@ tool=gt
 project=Kokoabim.GitTasks
 deploy_dir=/opt/kokoabim/bin
 
-action="Build ConsoleApp"
+action="Build $project"
 deploy=0
 yes=0
 while getopts "dhy" opt; do
     case $opt in
     d)
         deploy=1
-        action="Build and deploy ConsoleApp"
+        action="Build and deploy $project to $deploy_dir"
         ;;
     h)
-        echo "Build & Deploy ConsoleApp"
-        echo "Usage: $script_name [-dhy]" >&2
-        echo " -d  Deploy to $deploy_dir" >&2
-        echo " -h  Show this help message" >&2
-        echo " -y  Confirm yes" >&2
+        echo "Build & Deploy $project"
+        echo "Usage: $script_name [-dhy]"
+        echo " -d  Deploy to $deploy_dir"
+        echo " -h  Show this help message"
+        echo " -y  Confirm yes"
         exit 0
         ;;
     y) yes=1 ;;

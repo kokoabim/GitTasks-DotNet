@@ -1,0 +1,3 @@
+[submodule "Kokoabim.CommandLineInterface"]
+	path = libs/Kokoabim.CommandLineInterface
+	url = git@github.com:kokoabim/CommandLineInterface-DotNet.git

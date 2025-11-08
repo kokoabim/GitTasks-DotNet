@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+    <ItemGroup>
+      <ProjectReference Include="..\..\libs\Kokoabim.CommandLineInterface\src\Kokoabim.CommandLineInterface\Kokoabim.CommandLineInterface.csproj" />
+    </ItemGroup>
+
     <PropertyGroup>
         <AssemblyName>gt</AssemblyName>
         <AssemblyVersion>0.1</AssemblyVersion>
@@ -9,9 +13,5 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="../../../Kokoabim.CommandLineInterface/src/Kokoabim.CommandLineInterface/Kokoabim.CommandLineInterface.csproj" />
-    </ItemGroup>
 
 </Project>
