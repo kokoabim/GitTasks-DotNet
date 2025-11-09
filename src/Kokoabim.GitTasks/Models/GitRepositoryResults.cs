@@ -8,8 +8,10 @@ public class GitRepositoryResults
     public ExecuteResult? Clean { get; set; }
     public ExecuteResult? Commit { get; set; }
     public ExecuteResult<GitCommitPosition>? CommitPosition { get; set; }
+    public ExecuteResult<DiffStats>? Diff { get; set; }
     public ExecuteResult? Fetch { get; set; }
     public ExecuteResult? FullStatus { get; set; }
+    public ExecuteResult? Merge { get; set; }
     public ExecuteResult? Pull { get; set; }
     public ExecuteResult? Push { get; set; }
     public ExecuteResult? Reset { get; set; }

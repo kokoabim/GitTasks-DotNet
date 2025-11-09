@@ -139,18 +139,18 @@ public static class GitTasksArguments
         helpText: "Do not include all refs (default: include all refs)"
     );
 
-    public static ConsoleArgument LogFilePatternOption => new(
-        type: ArgumentType.Option,
-        identifier: "f",
-        name: "file",
-        helpText: "Show commits affecting specific files or paths"
-    );
-
     public static ConsoleArgument LogDoNotIncludeMergesSwitch => new(
         type: ArgumentType.Switch,
         identifier: "g",
         name: "no-merges",
         helpText: "Do not include merge commits"
+    );
+
+    public static ConsoleArgument LogFilePatternOption => new(
+        type: ArgumentType.Option,
+        identifier: "f",
+        name: "file",
+        helpText: "Show commits affecting specific files or paths"
     );
 
     public static ConsoleArgument LogListFilesSwitch => new(
@@ -194,6 +194,64 @@ public static class GitTasksArguments
         identifier: "p",
         name: "pull",
         helpText: "Pull changes from remote"
+    );
+
+    public static ConsoleArgument MergeInBranchOrCommitArgument => new(
+        type: ArgumentType.Positional,
+        name: "branch-or-commit",
+        helpText: "Branch name or commit hash to merge in. Default is primary branch name or use `!` to indicate so.",
+        defaultValue: "!"
+    );
+
+    public static ConsoleArgument MergeInDiffOnlySwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "d",
+        name: "diff",
+        helpText: "Show diff of changes to be merged only"
+    );
+
+    public static ConsoleArgument MergeInDoNotFetchSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "f",
+        name: "no-fetch",
+        helpText: "Do not fetch from remote before merging"
+    );
+
+    public static ConsoleArgument MergeInPathOption => new(
+        type: ArgumentType.Option,
+        identifier: "p",
+        name: "path",
+        helpText: "Git repository path",
+        defaultValue: "."
+    );
+
+    public static ConsoleArgument MergeInRemoteNameOption => new(
+        type: ArgumentType.Option,
+        identifier: "n",
+        name: "remote-name",
+        helpText: "Remote name (default: origin)",
+        defaultValue: "origin"
+    );
+
+    public static ConsoleArgument MergeInUseLocalSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "l",
+        name: "local",
+        helpText: "Use local branch if both local and remote exists"
+    );
+
+    public static ConsoleArgument MergeInUseRemoteSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "r",
+        name: "remote",
+        helpText: "Use remote branch if both local and remote exists"
+    );
+
+    public static ConsoleArgument MergeInYesSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "y",
+        name: "yes",
+        helpText: "Automatically confirm to merge"
     );
 
     public static ConsoleArgument MoveBackOption => new(

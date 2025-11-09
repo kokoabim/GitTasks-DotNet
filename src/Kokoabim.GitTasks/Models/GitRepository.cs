@@ -14,6 +14,7 @@ public class GitRepository
     public string NameAndRelativePath { get; private set; } = null!;
     public string Path { get; }
     public string RelativePath { get; private set; } = null!;
+    public string RemoteName { get; set; } = "origin";
     public GitRepositoryResults Results { get; } = new();
 
     [MemberNotNullWhen(true, nameof(CurrentBranch), nameof(DefaultBranch), nameof(Name), nameof(Path))]

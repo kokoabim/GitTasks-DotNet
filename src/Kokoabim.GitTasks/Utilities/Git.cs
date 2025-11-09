@@ -57,6 +57,18 @@ public class Git
         return _executor.Execute("git", args, workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
     }
 
+    public ExecuteResult<DiffStats> DiffWith(string path, string branch, CancellationToken cancellationToken = default)
+    {
+        var statsResult = _executor.Execute("git", $"diff --numstat --shortstat ...{branch}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+        if (!statsResult.Success) return statsResult.WithNull<DiffStats>();
+        else if (string.IsNullOrWhiteSpace(statsResult.Output)) return statsResult.WithValue(new DiffStats());
+
+        var nameStatusesResult = _executor.Execute("git", $"diff --name-status ...{branch}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+        if (!nameStatusesResult.Success) return nameStatusesResult.WithNull<DiffStats>();
+
+        return statsResult.WithValue(DiffStats.TryParse(statsResult.Output, nameStatusesResult.Output, out var ds) ? ds : null);
+    }
+
     public ExecuteResult Fetch(string path, string? branch = null, CancellationToken cancellationToken = default) =>
         _executor.Execute("git", branch is null ? "fetch" : $"fetch origin {branch}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
 
@@ -279,6 +291,20 @@ public class Git
         return result.Success ? result.Output.Trim() : null;
     }
 
+    public GitBranch[] MatchBranches(GitRepository repository, string branchPattern)
+    {
+        var matcher = new Regex($"^{Regex.Escape(branchPattern).Replace("\\*", ".*").Replace("\\?", ".")}$", RegexOptions.IgnoreCase);
+
+        repository.Results.Branches = GetBranches(repository.Path);
+
+        return repository.Results.Branches.Success
+            ? [.. repository.Results.Branches.Value.Where(b => matcher.IsMatch(b.Name))]
+            : [];
+    }
+
+    public ExecuteResult Merge(string path, string branchOrCommit, CancellationToken cancellationToken = default) =>
+        _executor.Execute("git", $"merge {branchOrCommit}", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
+
     public ExecuteResult Pull(string path, CancellationToken cancellationToken = default) =>
         _executor.Execute("git", "pull", workingDirectory: path, cancellationToken: cancellationToken).WithReference(path);
 
@@ -437,6 +463,7 @@ public class Git
             CurrentBranch = currentBranchExecResult.Value,
             DefaultBranch = defaultBranchExecResult.Value,
             IsSubmodule = isSubmodule,
+            RemoteName = remoteName ?? "origin",
         }, path);
 
     }

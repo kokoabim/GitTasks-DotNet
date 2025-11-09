@@ -13,6 +13,7 @@ public static class GitTasksCommands
         FixRefCommand(),
         LogCommand(),
         MainCommand(),
+        MergeInCommand(),
         PullCommand(),
         ResetCommand(),
         SetSubmoduleIgnoreOptionCommand(),
@@ -29,7 +30,7 @@ public static class GitTasksCommands
             GitTasksArguments.CheckoutCreateBranchSwitch,
             GitTasksArguments.ShowGitOutputSwitch
         ],
-        asyncFunction: GitTasksCommandOperations.CheckoutAsync
+        syncFunction: GitTasksCommandOperations.Checkout
     );
 
     private static ConsoleCommand CleanCommand() => new(
@@ -89,6 +90,23 @@ public static class GitTasksCommands
             GitTasksArguments.ShowGitOutputSwitch
         ],
         asyncFunction: GitTasksCommandOperations.CheckoutMainAsync
+    );
+
+    private static ConsoleCommand MergeInCommand() => new(
+        name: "merge-in",
+        titleText: "Merge in another branch or commit",
+        arguments: [
+            GitTasksArguments.MergeInDiffOnlySwitch,
+            GitTasksArguments.MergeInDoNotFetchSwitch,
+            GitTasksArguments.MergeInUseLocalSwitch,
+            GitTasksArguments.MergeInUseRemoteSwitch,
+            GitTasksArguments.ShowGitOutputSwitch,
+            GitTasksArguments.MergeInYesSwitch,
+            GitTasksArguments.MergeInRemoteNameOption,
+            GitTasksArguments.MergeInPathOption,
+            GitTasksArguments.MergeInBranchOrCommitArgument,
+        ],
+        syncFunction: GitTasksCommandOperations.MergeInBranch
     );
 
     private static ConsoleCommand PullCommand() => new(

@@ -6,7 +6,7 @@
 
     <PropertyGroup>
         <AssemblyName>gt</AssemblyName>
-        <AssemblyVersion>0.1</AssemblyVersion>
+        <AssemblyVersion>1.0</AssemblyVersion>
         <DefaultNamespace>Kokoabim.GitTasks</DefaultNamespace>
         <OutputType>Exe</OutputType>
         <TargetFramework>net9.0</TargetFramework>

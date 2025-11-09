@@ -2,6 +2,7 @@ namespace Kokoabim.GitTasks;
 
 public class GitBranch
 {
+    public string FullName => IsRemote && Remote is not null ? $"{Remote}/{Name}" : Name;
     public bool IsCurrent { get; set; }
     public bool IsRemote { get; set; }
     public string Name { get; set; }

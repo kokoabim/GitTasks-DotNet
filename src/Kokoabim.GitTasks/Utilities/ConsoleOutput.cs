@@ -45,7 +45,7 @@ public static class ConsoleOutput
         Console.ResetColor();
     }
 
-    public static void WriteHeaderCheckout(GitRepository repository, bool dynamically)
+    public static void WriteHeaderCheckout(GitRepository repository, bool dynamically, bool onNewLine = false)
     {
         if (dynamically) ClearHeaderDynamicallyActivity(repository);
 
@@ -88,7 +88,9 @@ public static class ConsoleOutput
         {
             if (dynamically) Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
 
-            WriteLight(" ");
+            if (!onNewLine) WriteLight(" ");
+            else message = message[0].ToString().ToUpper() + message[1..];
+
             if (hasError) WriteRed(message);
             else if (didSwitch) WriteGreen(message);
             else WriteLight(message);
@@ -183,8 +185,8 @@ public static class ConsoleOutput
                 repository.ConsolePosition.Left += 15;
                 if (errorMessage is not null)
                 {
-                    WriteLight($" ({errorMessage})");
-                    repository.ConsolePosition.Left += errorMessage.Length + 3;
+                    WriteLight($" {errorMessage}");
+                    repository.ConsolePosition.Left += errorMessage.Length + 1;
                 }
             }
             else if (hasPositions)
@@ -236,17 +238,17 @@ public static class ConsoleOutput
         if (withActivity) WriteHeaderDynamicallyActivity(repository);
     }
 
-    public static void WriteHeaderMatchBranch(GitRepository r, GitBranch[]? matchingBranches, bool dynamically)
+    public static void WriteHeaderMatchBranch(GitRepository r, GitBranch[]? matchingBranches, bool dynamically, bool onNewLine = false)
     {
         if (dynamically) ClearHeaderDynamicallyActivity(r);
 
         string? message = null;
         string? branches = null;
-        if (matchingBranches is null) message = " failed to get branches";
-        else if (matchingBranches.Length == 0) message = " no matches";
+        if (matchingBranches is null) message = (onNewLine ? "F" : " f") + "ailed to get branches";
+        else if (matchingBranches.Length == 0) message = (onNewLine ? "N" : " n") + "o matches";
         else if (matchingBranches.Length > 1)
         {
-            message = " multiple matches ";
+            message = (onNewLine ? "M" : " m") + "ultiple matches ";
             branches = string.Join(", ", matchingBranches.Select(static b => b.Name));
         }
 
@@ -259,6 +261,52 @@ public static class ConsoleOutput
         }
 
         r.ConsolePosition.Left += (message?.Length ?? 0) + (branches?.Length ?? 0);
+    }
+
+    public static void WriteHeaderMerge(GitRepository repository, bool dynamically, bool onNewLine = false, bool showGitOutput = false)
+    {
+        if (dynamically) ClearHeaderDynamicallyActivity(repository);
+
+        if (repository.Results.Merge is null) return;
+
+        var output = repository.Results.Merge.Output ?? "";
+        var hasError = !repository.Results.Merge.Success;
+        var didMerge = false;
+
+        string message;
+        if (output.Contains("CONFLICT ") || output.Contains("merge conflict", StringComparison.OrdinalIgnoreCase) || output.Contains("automatic merge failed", StringComparison.OrdinalIgnoreCase)) { message = "conflict"; hasError = true; }
+        else if (!hasError && output.Contains("merge made", StringComparison.OrdinalIgnoreCase)) { message = "merged"; didMerge = true; }
+        else if (!hasError && output.Contains("fast-forward", StringComparison.OrdinalIgnoreCase)) { message = "merged"; didMerge = true; }
+        else if (!hasError && output.Contains("already up to date", StringComparison.OrdinalIgnoreCase)) { message = "up to date"; }
+        else if (output.Contains("divergent branches", StringComparison.OrdinalIgnoreCase)) { message = "divergent branches"; hasError = true; }
+        else if (output.Contains("permission denied", StringComparison.OrdinalIgnoreCase)) { message = "permission denied"; hasError = true; }
+        else if (output.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase)) { message = "local changes would be overwritten"; hasError = true; }
+        else if (output.Contains("no tracking information for the current branch", StringComparison.OrdinalIgnoreCase)) { message = "no tracking information"; hasError = true; }
+        else if (output.Contains("no such ref was fetched", StringComparison.OrdinalIgnoreCase)) { message = "no remote"; hasError = true; }
+        else if (output.Contains("Aborting")) { message = "aborted"; hasError = true; }
+        else if (output.Contains("error: ", StringComparison.OrdinalIgnoreCase)) { message = "error"; hasError = true; }
+        else if (output.Contains("fatal: ", StringComparison.OrdinalIgnoreCase)) { message = "fatal"; hasError = true; }
+        else { message = "unknown"; hasError = true; }
+
+        lock (_positionLock)
+        {
+            if (dynamically) Console.SetCursorPosition(repository.ConsolePosition.Left, repository.ConsolePosition.Top);
+
+            if (!onNewLine) WriteLight(" ");
+            else message = message[0].ToString().ToUpper() + message[1..] + (showGitOutput ? ":" : "");
+
+            if (hasError) WriteRed(message);
+            else if (didMerge) WriteGreen(message);
+            else WriteLight(message);
+        }
+
+        repository.ConsolePosition.Left += message.Length + 1;
+
+        if (showGitOutput)
+        {
+            Console.WriteLine();
+            WriteLight(output);
+        }
     }
 
     public static void WriteHeaderPull(GitRepository repository, bool dynamically)
@@ -313,31 +361,35 @@ public static class ConsoleOutput
             return;
         }
 
-        var repo = repositoryExecResult.Value!;
+        WriteHeaderRepository(repositoryExecResult.Value!, withStatus, newline, withActivity);
+    }
 
-        WriteNormal(repo.NameAndRelativePath);
-        repo.ConsolePosition.Left += repo.NameAndRelativePath.Length;
+    public static void WriteHeaderRepository(GitRepository repository, bool withStatus = false, bool newline = true, bool withActivity = false, int? consoleTop = null)
+    {
+        WriteNormal(repository.NameAndRelativePath);
+        if (consoleTop.HasValue) repository.ConsolePosition.Top = consoleTop.Value;
+        repository.ConsolePosition.Left += repository.NameAndRelativePath.Length;
 
-        if (repo.CurrentBranch is not null)
+        if (repository.CurrentBranch is not null)
         {
-            if (repo.CurrentBranch == repo.DefaultBranch || repo.DefaultBranch is null) WriteLight($" {repo.CurrentBranch}");
-            else WriteBlue($" {repo.CurrentBranch}");
+            if (repository.CurrentBranch == repository.DefaultBranch || repository.DefaultBranch is null) WriteLight($" {repository.CurrentBranch}");
+            else WriteBlue($" {repository.CurrentBranch}");
 
-            repo.ConsolePosition.Left += repo.CurrentBranch.Length + 1;
+            repository.ConsolePosition.Left += repository.CurrentBranch.Length + 1;
         }
 
-        if (!repo.Success)
+        if (!repository.Success)
         {
             WriteRed(" error");
-            WriteLight($" ({repo.Error})", newline: false);
+            WriteLight($" ({repository.Error})", newline: false);
 
-            repo.ConsolePosition.Left += 6 + repo.Error.Length + 3;
+            repository.ConsolePosition.Left += 6 + repository.Error.Length + 3;
         }
 
-        if (withStatus && repo.Results.Status is not null)
+        if (withStatus && repository.Results.Status is not null)
         {
-            var output = repo.Results.Status.Output ?? "";
-            var hasError = !repo.Results.Status.Success;
+            var output = repository.Results.Status.Output ?? "";
+            var hasError = !repository.Results.Status.Success;
             var hasChanges = false;
 
             string message;
@@ -349,10 +401,10 @@ public static class ConsoleOutput
             else if (hasChanges) WriteYellow(message);
             else WriteGreen(message);
 
-            repo.ConsolePosition.Left += message.Length;
+            repository.ConsolePosition.Left += message.Length;
         }
 
-        if (withActivity) WriteHeaderDynamicallyActivity(repo, doNotSetPosition: newline);
+        if (withActivity) WriteHeaderDynamicallyActivity(repository, doNotSetPosition: newline);
 
         if (newline) Console.WriteLine();
     }
