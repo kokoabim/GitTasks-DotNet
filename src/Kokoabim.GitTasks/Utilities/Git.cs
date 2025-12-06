@@ -233,20 +233,20 @@ public class Git
         return ExecuteResult.CreateWithObject(distinctOrderedLogEntries, settings.Path);
     }
 
-    public ExecuteResult<GitRepository>[] GetRepositories(string path, string? remoteName = null, CancellationToken cancellationToken = default)
+    public ExecuteResult<GitRepository>[] GetRepositories(string path, string? remoteName = null, bool noSubmodules = false, CancellationToken cancellationToken = default)
     {
         var results = new List<ExecuteResult<GitRepository>>();
         results.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepository(d, isSubmodule: false, remoteName: remoteName, cancellationToken: cancellationToken)));
-        results.AddRange(GetSubmoduleDirectories(path, cancellationToken).Select(d => GetRepository(d, isSubmodule: true, remoteName: remoteName, cancellationToken: cancellationToken)));
+        if (!noSubmodules) results.AddRange(GetSubmoduleDirectories(path, cancellationToken).Select(d => GetRepository(d, isSubmodule: true, remoteName: remoteName, cancellationToken: cancellationToken)));
 
         return [.. results.OrderBy(r => r.Value!.Path).ForEach(r => r.Value!.SetRelativePath(path))];
     }
 
-    public async Task<ExecuteResult<GitRepository>[]> GetRepositoriesAsync(string path, string? remoteName = null, CancellationToken cancellationToken = default)
+    public async Task<ExecuteResult<GitRepository>[]> GetRepositoriesAsync(string path, string? remoteName = null, bool noSubmodules = false, CancellationToken cancellationToken = default)
     {
         var tasks = new List<Task<ExecuteResult<GitRepository>>>();
         tasks.AddRange(_fileSystem.GetGitDirectories(path).Select(d => GetRepositoryAsync(d, isSubmodule: false, remoteName: remoteName, cancellationToken: cancellationToken)));
-        tasks.AddRange((await GetSubmoduleDirectoriesAsync(path, cancellationToken)).Select(d => GetRepositoryAsync(d, isSubmodule: true, remoteName: remoteName, cancellationToken: cancellationToken)));
+        if (!noSubmodules) tasks.AddRange((await GetSubmoduleDirectoriesAsync(path, cancellationToken)).Select(d => GetRepositoryAsync(d, isSubmodule: true, remoteName: remoteName, cancellationToken: cancellationToken)));
         var results = await Task.WhenAll(tasks);
 
         return [.. results.OrderBy(r => r.Value!.Path).ForEach(r => r.Value!.SetRelativePath(path))];

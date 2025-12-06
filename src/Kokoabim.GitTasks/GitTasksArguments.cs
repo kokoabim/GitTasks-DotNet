@@ -6,6 +6,8 @@ public static class GitTasksArguments
 {
     #region properties
 
+    public static IEnumerable<ConsoleArgument> Globals => [NoSubmoduleSwitch];
+
     public static ConsoleArgument CheckoutBranchOrCommitArgument => new(
         type: ArgumentType.Positional,
         name: "branch-or-commit",
@@ -261,6 +263,14 @@ public static class GitTasksArguments
         helpText: "Move back N commits from specified commit",
         defaultValue: (uint)0,
         constraints: ArgumentConstraints.MustBeUInteger
+    );
+
+    public static ConsoleArgument NoSubmoduleSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "sub",
+        name: "sub",
+        helpText: "Do not include submodules",
+        isGlobal: true
     );
 
     public static ConsoleArgument PathArgument => new(

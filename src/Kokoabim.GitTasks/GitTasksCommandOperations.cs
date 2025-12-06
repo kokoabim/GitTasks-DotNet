@@ -861,7 +861,7 @@ public static class GitTasksCommandOperations
     {
         var path = _fileSystem.GetFullPath(context.GetStringOrDefault(GitTasksArguments.PathArgument.Name) ?? ".");
 
-        repositoriesExecResults = _git.GetRepositories(path, remoteName, context.CancellationToken);
+        repositoriesExecResults = _git.GetRepositories(path, remoteName, context.HasSwitch(GitTasksArguments.NoSubmoduleSwitch.Name), context.CancellationToken);
         if (repositoriesExecResults.Length == 0)
         {
             Console.WriteLine($"No git repositories found: {path}");
