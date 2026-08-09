@@ -3,7 +3,7 @@ namespace Kokoabim.GitTasks.Tests;
 public class ExecutorTests
 {
     [Fact]
-    public async Task ExecuteAsync_ReturnsSuccess()
+    public async Task ExecuteAsync_ReturnsSuccess_Async()
     {
         // Arrange
         var executor = new Executor();

@@ -3,7 +3,7 @@ namespace Kokoabim.GitTasks.Tests;
 public class GitTests
 {
     [Fact]
-    public async Task GetVersionAsync_ReturnsVersion_WhenGitIsInstalledAsync()
+    public async Task GetVersionAsync_ReturnsVersion_WhenGitIsInstalled_Async()
     {
         // Arrange
         var git = new Git();

@@ -951,5 +951,5 @@ public static class GitTasksCommandOperations
         return true;
     }
 
-    #endregion 
+    #endregion
 }

@@ -183,5 +183,5 @@ public static class GitTasksCommands
         syncFunction: GitTasksCommandOperations.UpdateSubmoduleCommits
     );
 
-    #endregion 
+    #endregion
 }

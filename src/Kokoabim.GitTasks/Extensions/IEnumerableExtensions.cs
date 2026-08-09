@@ -23,13 +23,13 @@ public static class IEnumerableExtensions
 
     public static T[]? NonNull<T>(this IEnumerable<T?> source) where T : class
     {
-        var items = source.Where(i => i is not null);
+        var items = source.Where(static i => i is not null);
         return items.Any() ? [.. items!] : null;
     }
 
     public static string[]? NonNullOrWhiteSpace(this IEnumerable<string?> source)
     {
-        var items = source.Where(i => !string.IsNullOrWhiteSpace(i));
+        var items = source.Where(static i => !string.IsNullOrWhiteSpace(i));
         return items.Any() ? [.. items!] : null;
     }
 }

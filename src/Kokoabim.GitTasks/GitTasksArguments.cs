@@ -6,8 +6,6 @@ public static class GitTasksArguments
 {
     #region properties
 
-    public static IEnumerable<ConsoleArgument> Globals => [NoSubmoduleSwitch];
-
     public static ConsoleArgument CheckoutBranchOrCommitArgument => new(
         type: ArgumentType.Positional,
         name: "branch-or-commit",
@@ -117,6 +115,8 @@ public static class GitTasksArguments
         name: "fetch",
         helpText: "Fetch changes from remote"
     );
+
+    public static IEnumerable<ConsoleArgument> Globals => [NoSubmoduleSwitch];
 
     public static ConsoleArgument LogAfterOption => new(
         type: ArgumentType.Option,
