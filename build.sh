@@ -26,13 +26,13 @@ while getopts "dhmr:y" opt; do
         echo " -d  Deploy to $deploy_dir"
         echo " -h  Show this help message"
         echo " -m  Build for multiple runtime identifiers (RIDs)"
-        echo " -r  Runtime identifier (RID) to build for (default: $default_runtime)" 
+        echo " -r  Runtime identifier (RID) to build for (default: $default_runtime)"
         echo " -y  Confirm yes"
         exit 0
         ;;
     m)
         action="Build $project for multiple runtime identifiers (RIDs)"
-        runtimes=("osx-arm64" "osx-x64" "linux-x64" "linux-arm64" "win-x64" "win-arm64") 
+        runtimes=("osx-arm64" "osx-x64" "linux-x64" "linux-arm64" "win-x64" "win-arm64" "win-x86")
         ;;
     r)
         runtimes=("$OPTARG")
@@ -63,7 +63,7 @@ echo "Building..."
 rm -rf ./build
 
 for runtime in "${runtimes[@]}"; do
-    dotnet publish -c Release -r "$runtime" -p:PublishSingleFile=true --self-contained false -o "./build/$runtime" src/$project/$project.csproj
+    dotnet publish -c Release -r "$runtime" -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false --self-contained false -o "./build/$runtime" src/$project/$project.csproj
 
     tool_file="$tool"
     if [[ $runtime == win* ]]; then
