@@ -164,7 +164,7 @@ public static class ConsoleOutput
         string? errorMessage = null;
         if (!hasError && commitPosition is not null)
         {
-            hasPositions = commitPosition.AheadBy > 0 || commitPosition.BehindBy > 0;
+            hasPositions = !commitPosition.IsClean;
             if (commitPosition.AheadBy > 0) aheadBy = $" ↑{commitPosition.AheadBy}";
             if (commitPosition.BehindBy > 0) behindBy = $" ↓{commitPosition.BehindBy}";
         }

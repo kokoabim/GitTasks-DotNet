@@ -22,6 +22,13 @@ public static class GitTasksArguments
         helpText: "Create and switch to a new branch"
     );
 
+    public static ConsoleArgument CheckoutPullSwitch => new(
+        type: ArgumentType.Switch,
+        identifier: "p",
+        name: "pull",
+        helpText: "Pull changes from remote after checkout"
+    );
+
     public static ConsoleArgument CleanDryRunSwitch => new(
             type: ArgumentType.Switch,
             identifier: "n",
@@ -82,6 +89,26 @@ public static class GitTasksArguments
         identifier: "b",
         name: "branch",
         helpText: "Create a new branch and check it out"
+    );
+
+    public static ConsoleArgument FetchPathOption => new(
+        type: ArgumentType.Option,
+        identifier: "p",
+        name: "path",
+        helpText: "Git repository path",
+        defaultValue: "."
+    );
+
+    public static ConsoleArgument FetchRefSpecArgument => new(
+        type: ArgumentType.Positional,
+        name: "refspec",
+        helpText: "Refspec (branch/tag) to fetch and update"
+    );
+
+    public static ConsoleArgument FetchRemoteNameArgument => new(
+        type: ArgumentType.Positional,
+        name: "remote",
+        helpText: "Remote name"
     );
 
     public static ConsoleArgument FetchSwitch => new(
@@ -276,7 +303,7 @@ public static class GitTasksArguments
     public static ConsoleArgument PathArgument => new(
         type: ArgumentType.Positional,
         name: "path",
-        helpText: "Git repository path",
+        helpText: "Git repository path (default: current directory)",
         defaultValue: ".",
         constraints: ArgumentConstraints.DirectoryMustExist
     );
@@ -328,5 +355,5 @@ public static class GitTasksArguments
         constraintType: typeof(GitSubmoduleIgnoreOption)
     );
 
-    #endregion 
+    #endregion
 }

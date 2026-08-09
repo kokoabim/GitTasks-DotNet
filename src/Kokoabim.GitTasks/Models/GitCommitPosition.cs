@@ -4,4 +4,5 @@ public class GitCommitPosition
 {
     public int AheadBy { get; set; }
     public int BehindBy { get; set; }
+    public bool IsClean => AheadBy == 0 && BehindBy == 0;
 }

@@ -21,6 +21,7 @@ public static class GitTasksCommandOperations
         var branchOrCommit = context.GetString(GitTasksArguments.CheckoutBranchOrCommitArgument.Name);
         var createBranch = context.HasSwitch(GitTasksArguments.CheckoutCreateBranchSwitch.Name);
         var showGitOutput = context.HasSwitch(GitTasksArguments.ShowGitOutputSwitch.Name);
+        var pullSwitch = !createBranch && context.HasSwitch(GitTasksArguments.CheckoutPullSwitch.Name);
 
         ConsoleOutput.WriteHeaderRepository(repository, newline: false, withActivity: true, consoleTop: Console.CursorTop);
 
@@ -37,13 +38,13 @@ public static class GitTasksCommandOperations
         }
         else
         {
-            var matchedBranches = _git.MatchBranches(repository, branchOrCommit).DistinctBy(b => b.Name).OrderBy(b => b.Name).ToArray();
+            var matchedBranches = _git.MatchBranches(repository, branchOrCommit).DistinctBy(static b => b.Name).OrderBy(static b => b.Name).ToArray();
             if (matchedBranches.Length > 1)
             {
                 ConsoleOutput.ClearHeaderDynamicallyActivity(repository, resetPosition: true);
                 Console.WriteLine();
 
-                int option = ConsoleApp.GetOptionInput([.. matchedBranches.Select(b => b.Name)], "Select branch to checkout");
+                int option = ConsoleApp.GetOptionInput([.. matchedBranches.Select(static b => b.Name)], "Select branch to checkout");
                 if (option == 0) return 0;
 
                 branchOrCommit = matchedBranches[option - 1].Name;
@@ -57,11 +58,35 @@ public static class GitTasksCommandOperations
 
         repository.Results.Checkout = _git.Checkout(repository.Path, branchOrCommit, createBranch, context.CancellationToken);
         ConsoleOutput.WriteHeaderCheckout(repository, dynamically: Console.CursorLeft != 0 && !showGitOutput, onNewLine: showGitOutput || Console.CursorLeft == 0);
+        if (showGitOutput) Console.WriteLine();
+
+        if (showGitOutput && !string.IsNullOrWhiteSpace(repository.Results.Checkout.Output))
+            ConsoleOutput.WriteLight((pullSwitch ? $"CHECKOUT:{Environment.NewLine}" : "") + repository.Results.Checkout.Output, newline: false);
+
+        if (repository.Results.Checkout.Success && pullSwitch)
+        {
+            repository.Results.Pull = _git.Pull(repository.Path, context.CancellationToken);
+            repository.Results.CommitPosition = _git.GetCommitPosition(repository.Path, branchOrCommit, context.CancellationToken);
+
+            if (showGitOutput)
+            {
+                if (repository.Results.Pull.Success) ConsoleOutput.WriteLight($"{Environment.NewLine}PULL:{Environment.NewLine}" + repository.Results.Pull.Output, newline: true);
+                else ConsoleOutput.WriteRedAndLight($"FAILED PULL:{Environment.NewLine}", repository.Results.Pull.ToString(), newline: true);
+
+                if (repository.Results.CommitPosition.Value?.IsClean == false) ConsoleOutput.WriteLight("COMMIT POSITION: ");
+            }
+            else
+            {
+                ConsoleOutput.WriteHeaderPull(repository, dynamically: Console.CursorLeft != 0 && !showGitOutput);
+            }
+
+            if (repository.Results.CommitPosition.Value?.IsClean == false)
+                ConsoleOutput.WriteHeaderCommitPosition(repository, dynamically: Console.CursorLeft != 0 && !showGitOutput);
+        }
+
         Console.WriteLine();
 
-        if (showGitOutput && !string.IsNullOrWhiteSpace(repository.Results.Checkout.Output)) ConsoleOutput.WriteLight(repository.Results.Checkout.Output, true);
-
-        return 0;
+        return repository.Results.Checkout.Success && (!pullSwitch || repository.Results.Pull?.Success == true) ? 0 : 1;
     }
 
     public static async Task<int> CheckoutMainAsync(ConsoleContext context)
@@ -167,6 +192,39 @@ public static class GitTasksCommandOperations
         }
 
         return 0;
+    }
+
+    public static async Task<int> FetchAsync(ConsoleContext context)
+    {
+        var path = _fileSystem.GetFullPath(context.GetStringOrDefault(GitTasksArguments.FetchPathOption.Name) ?? ".");
+
+        if (!TryGetRepository(context, out GitRepository? repository, pathOverride: path)) return 1;
+
+        var remoteName = context.GetStringOrDefault(GitTasksArguments.FetchRemoteNameArgument.Name) ?? repository.RemoteName;
+        var branchName = context.GetStringOrDefault(GitTasksArguments.FetchRefSpecArgument.Name);
+        var showGitOutput = context.HasSwitch(GitTasksArguments.ShowGitOutputSwitch.Name);
+
+        ConsoleOutput.WriteHeaderRepository(repository, newline: showGitOutput, withActivity: !showGitOutput, consoleTop: Console.CursorTop);
+
+        repository.Results.Fetch = await _git.FetchAsync(repository.Path, remoteName, branchName, context.CancellationToken);
+
+        if (showGitOutput && !string.IsNullOrWhiteSpace(repository.Results.Fetch.Output))
+        {
+            if (repository.Results.Fetch.Success) ConsoleOutput.WriteLight(Environment.NewLine + repository.Results.Fetch.Output, newline: true);
+            else ConsoleOutput.WriteRedAndLight($" failed to fetch:{Environment.NewLine}", repository.Results.Fetch.ToString(), newline: true);
+        }
+        else if (!showGitOutput && !repository.Results.Fetch.Success)
+        {
+            ConsoleOutput.ClearHeaderDynamicallyActivity(repository, resetPosition: true);
+            ConsoleOutput.WriteRedAndLight(" failed to fetch ", repository.Results.Fetch.ToString(), newline: true);
+        }
+        else if (repository.Results.Fetch.Success && repository.Results.Fetch.Output == string.Empty)
+        {
+            ConsoleOutput.ClearHeaderDynamicallyActivity(repository, resetPosition: true);
+            ConsoleOutput.WriteGreen(" up to date", newline: true);
+        }
+
+        return repository.Results.Fetch.Success ? 0 : 1;
     }
 
     public static async Task<int> FixReferenceAsync(ConsoleContext context)
@@ -289,7 +347,7 @@ public static class GitTasksCommandOperations
 
         if (!doNotFetch)
         {
-            repository.Results.Fetch = _git.Fetch(repository.Path, cancellationToken: context.CancellationToken);
+            repository.Results.Fetch = _git.Fetch(repository.Path, remote: remoteNameOption, cancellationToken: context.CancellationToken);
 
             if (showGitOutput && !string.IsNullOrWhiteSpace(repository.Results.Fetch.Output))
             {
@@ -385,8 +443,11 @@ public static class GitTasksCommandOperations
                 var repo = er.Value!;
                 repo.Results.Pull = _git.Pull(repo.Path, context.CancellationToken);
                 if (asynchronously) ConsoleOutput.WriteHeaderPull(repo, dynamically: true);
-                if (repo.CurrentBranch is not null) repo.Results.CommitPosition = _git.GetCommitPosition(repo.Path, repo.CurrentBranch, context.CancellationToken);
-                if (asynchronously) ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
+                if (repo.CurrentBranch is not null)
+                {
+                    repo.Results.CommitPosition = _git.GetCommitPosition(repo.Path, repo.CurrentBranch, context.CancellationToken);
+                    if (asynchronously) ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: true);
+                }
             },
             context.CancellationToken));
 
@@ -403,7 +464,7 @@ public static class GitTasksCommandOperations
                 if (!task.IsCompleted) await task;
 
                 ConsoleOutput.WriteHeaderPull(repo, dynamically: false);
-                ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: false);
+                if (repo.CurrentBranch is not null) ConsoleOutput.WriteHeaderCommitPosition(repo, dynamically: false);
                 Console.WriteLine();
 
                 if (!string.IsNullOrWhiteSpace(repo.Results.Pull?.Output)) ConsoleOutput.WriteLight(repo.Results.Pull.Output, true);
@@ -581,7 +642,7 @@ public static class GitTasksCommandOperations
 
             if (!doNotFetch)
             {
-                var fetchExecResult = _git.Fetch(repo.Path, gitLogSettings.Branch, context.CancellationToken);
+                var fetchExecResult = _git.Fetch(repo.Path, refspec: gitLogSettings.Branch, cancellationToken: context.CancellationToken);
                 if (!fetchExecResult.Success)
                 {
                     ConsoleOutput.ClearHeaderDynamicallyActivity(repo, resetPosition: true);
@@ -654,7 +715,7 @@ public static class GitTasksCommandOperations
                     ConsoleOutput.WriteHeaderDynamicallyStatus(repo, withActivity: true);
                 }
 
-                if (fetchRemote) repo.Results.Fetch = _git.Fetch(repo.Path, repo.CurrentBranch, context.CancellationToken);
+                if (fetchRemote) repo.Results.Fetch = _git.Fetch(repo.Path, refspec: repo.CurrentBranch, cancellationToken: context.CancellationToken);
 
                 if (repo.CurrentBranch is not null)
                 {
@@ -672,7 +733,7 @@ public static class GitTasksCommandOperations
             {
                 var repo = repoExecResult.Value;
 
-                if (repo is not null) repo.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken);
+                _ = (repo?.Results.Status = _git.GetStatus(repo.Path, porcelain: true, context.CancellationToken));
                 ConsoleOutput.WriteHeaderRepository(repoExecResult, withStatus: repo?.Results.Status is not null, newline: !repoExecResult.Success);
 
                 if (!repoExecResult.Success || repo is null) continue;
@@ -736,7 +797,7 @@ public static class GitTasksCommandOperations
             }
         }
 
-        var gitModulesFileExecResult = _git.GetGitModulesFile(repo.Path);
+        var gitModulesFileExecResult = Git.GetGitModulesFile(repo.Path);
         if (!gitModulesFileExecResult.Success)
         {
             ConsoleOutput.WriteRed(gitModulesFileExecResult.ToString(), newline: true);

@@ -10,6 +10,7 @@ public static class GitTasksCommands
     [
         CheckoutCommand(),
         CleanCommand(),
+        FetchCommand(),
         FixRefCommand(),
         LogCommand(),
         MainCommand(),
@@ -28,6 +29,7 @@ public static class GitTasksCommands
             GitTasksArguments.CheckoutBranchOrCommitArgument,
             GitTasksArguments.PathArgument,
             GitTasksArguments.CheckoutCreateBranchSwitch,
+            GitTasksArguments.CheckoutPullSwitch,
             GitTasksArguments.ShowGitOutputSwitch
         ],
         syncFunction: GitTasksCommandOperations.Checkout
@@ -46,6 +48,18 @@ public static class GitTasksCommands
             GitTasksArguments.ShowGitOutputSwitch
         ],
         asyncFunction: GitTasksCommandOperations.CleanAsync
+    );
+
+    private static ConsoleCommand FetchCommand() => new(
+        name: "fetch",
+        titleText: "Download objects and refs",
+        arguments: [
+            GitTasksArguments.FetchRemoteNameArgument,
+            GitTasksArguments.FetchRefSpecArgument,
+            GitTasksArguments.FetchPathOption,
+            GitTasksArguments.ShowGitOutputSwitch
+        ],
+        asyncFunction: GitTasksCommandOperations.FetchAsync
     );
 
     private static ConsoleCommand FixRefCommand() => new(
